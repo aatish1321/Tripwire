@@ -7,6 +7,7 @@ import re
 from typing import Any, Iterator
 
 from firewall.policy_agent import ask_json
+from firewall.textnorm import fold
 from shared.contracts import Provenance
 
 TAG_CHARS = re.compile("[\U000E0000-\U000E007F]+")              # invisible "ASCII smuggling" characters
@@ -16,6 +17,9 @@ HIDDEN_STYLE = re.compile(
     r"<(\w+)[^>]*style\s*=\s*[\"'][^\"']*(?:display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?![.\d])"
     r"|opacity\s*:\s*0(?![.\d])|color\s*:\s*(?:#fff(?:fff)?\b|white))[^\"']*[\"'][^>]*>.*?</\1\s*>", re.S | re.I)
 BASE64 = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
+# Markdown "comments" that render as nothing: [//]: # (text), [comment]: <> (text), [x]: # "text"
+MARKDOWN_COMMENT = re.compile(r"^[ \t]*\[[^\]\n]*\]:[ \t]*(?:#|<>)[ \t]*(?:\([^\n]*\)|\"[^\n]*\")[ \t]*$", re.M)
+BIDI = re.compile(r"\S*[‪-‮⁦-⁩]+\S*")  # reorders text on screen ("Trojan Source")
 COMMANDS = [
     ("ai_command", re.compile(r"\bignore\b.{0,30}\b(instructions|rules|messages|above|previous|prior)\b", re.I)),
     ("ai_command", re.compile(r"\b(no need to|don'?t|do not|without)\s+(ask|asking|confirm|confirmation|check with)\b", re.I)),
@@ -65,6 +69,10 @@ def _patterns(field: str, text: str, untrusted: bool) -> list[dict]:
         found.append({"field": field, "text": m.group(), "technique": "zero_width_characters"})
     for m in HTML_COMMENT.finditer(text):
         found.append({"field": field, "text": m.group(), "technique": "html_comment"})
+    for m in MARKDOWN_COMMENT.finditer(text):
+        found.append({"field": field, "text": m.group().strip(), "technique": "markdown_comment"})
+    for m in BIDI.finditer(text):
+        found.append({"field": field, "text": m.group(), "technique": "bidi_control"})
     for m in HIDDEN_STYLE.finditer(text):
         found.append({"field": field, "text": m.group(), "technique": "hidden_styling"})
     for m in BASE64.finditer(text):
@@ -74,7 +82,8 @@ def _patterns(field: str, text: str, untrusted: bool) -> list[dict]:
     if untrusted:
         for sentence in SENTENCE.split(text):
             sentence = sentence.strip()
-            hit = next((tech for tech, rx in COMMANDS if rx.search(sentence)), None)
+            plain = fold(sentence)  # match "ｉｇｎｏｒｅ" and Cyrillic "ignоre" too; the evidence stays the original text
+            hit = next((tech for tech, rx in COMMANDS if rx.search(plain)), None)
             if hit and not any(sentence in f["text"] for f in found):
                 found.append({"field": field, "text": sentence, "technique": hit})
     return found
