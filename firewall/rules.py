@@ -1,5 +1,6 @@
 """B2/B6: deterministic rules. Each returns None (no objection) or (rule_id, template_reason)."""
 import re
+import shlex
 from typing import Optional
 
 from firewall.session import Session
@@ -20,10 +21,51 @@ R3_REASON = ("The agent has followed a stranger's instructions and read your pri
 # Fail closed: only tools that clearly just read are reads; any other verb (merge_, send_, publish…) counts as a write.
 READ_PREFIXES = ("list_", "get_", "read_", "search_")
 
+# run_command: a command is a read only if EVERY part of it is a plain read from this list. Anything else (rm, curl,
+# echo > file, env, $(...), secret files, unparseable text) stays a "write", so the Guard and the LLM still check it.
+READ_COMMANDS = {"ls", "cat", "pwd", "head", "tail", "grep", "wc", "tree", "find", "pytest", "echo"}
+READ_GIT = {"status", "log", "diff", "show", "branch"}
+SECRET_PATH = re.compile(r"(^|/)(\.env|\.ssh|id_rsa|id_ed25519|\.netrc|\.aws|\.npmrc)\b|\.pem$|\.key$|secret", re.I)
+
 Result = Optional[tuple[str, str]]
 
 
+def _command_reads_only(command: str) -> bool:
+    if "$(" in command or "`" in command:  # command substitution can hide anything
+        return False
+    try:
+        lex = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+        lex.whitespace_split = True
+        tokens = list(lex)
+    except ValueError:
+        return False
+    parts, current = [], []
+    for t in tokens:
+        if t in (";", "&&", "||", "|", "&"):
+            parts.append(current)
+            current = []
+        elif t in (">", ">>", "<", ">&"):
+            return False  # writing to (or reading from) a file through the shell
+        else:
+            current.append(t)
+    parts.append(current)
+    for p in (p for p in parts if p):
+        name, args = p[0], p[1:]
+        if name == "git":
+            if not args or args[0] not in READ_GIT:
+                return False
+        elif name not in READ_COMMANDS:
+            return False
+        if name == "find" and any(a in ("-delete", "-exec", "-execdir", "-ok", "-fprint") for a in args):
+            return False
+        if any(SECRET_PATH.search(a) for a in args):
+            return False  # reading .env or ~/.ssh is sensitive: let the Guard and the LLM look at it
+    return True
+
+
 def is_write(call: ToolCall) -> bool:
+    if call["tool"] == "run_command":
+        return not _command_reads_only(str(call["args"].get("command", "")))
     return not call["tool"].startswith(READ_PREFIXES)
 
 
