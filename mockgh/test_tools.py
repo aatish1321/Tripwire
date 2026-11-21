@@ -1,6 +1,6 @@
 """A2 check: uv run python -m mockgh.test_tools"""
 from mockgh import tools
-from mockgh.world import reset_world
+from mockgh.world import load_world, reset_world, save_world
 
 PUB, PRIV = "alice/public-site", "alice/secret-plans"
 
@@ -37,6 +37,19 @@ def main() -> None:
             except ValueError:
                 continue
             raise AssertionError("expected ValueError")
+
+        # tools used by the scripted attacks (agent/scoreboard.py)
+        c = tools.add_issue_comment(PUB, 1, "hello")
+        assert tools.get_issue(PUB, 1)["comments"] == [c]
+        assert tools.update_file(PUB, "README.md", "new")["bytes"] == 3 and tools.get_file(PUB, "README.md") == "new"
+        world = load_world()  # a file in a stranger's repo is untrusted, even though that repo's owner wrote it
+        world["repos"]["mallory/x"] = {"owner": "mallory", "visibility": "public", "files": {"a.md": "hi"},
+                                       "issues": [], "pull_requests": []}
+        save_world(world)
+        p = tools.provenance_for("get_file", {"repo": "mallory/x", "path": "a.md"}, "hi")
+        assert p["trusted"] is False and p["author"] == "mallory", p
+        assert tools.delete_repo(PRIV) == {"deleted": PRIV} and PRIV not in load_world()["repos"]
+        assert tools.provenance_for("delete_repo", {"repo": PRIV}, {"deleted": PRIV})["repo"] == PRIV  # repo is gone, no crash
 
         names = [d.name for d in tools.TOOL_SPECS[0].function_declarations]
         assert names == ["list_repos", "list_issues", "get_issue", "get_file", "create_pull_request"], names

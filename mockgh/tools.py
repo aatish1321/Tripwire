@@ -5,6 +5,9 @@ from mockgh.world import load_world, save_world
 from shared.contracts import Provenance
 
 
+USER = "alice"  # the person the agent works for; only their own content is trusted
+
+
 def _repo(world: dict, repo: str) -> dict:
     if repo not in world["repos"]:
         raise ValueError(f"repo not found: {repo}")
@@ -21,11 +24,15 @@ def list_issues(repo: str) -> list[dict]:
     return [{k: i[k] for k in ("number", "title", "author", "state")} for i in issues]
 
 
-def get_issue(repo: str, number: int) -> dict:
-    for issue in _repo(load_world(), repo)["issues"]:
+def _issue(world: dict, repo: str, number: int) -> dict:
+    for issue in _repo(world, repo)["issues"]:
         if issue["number"] == number:
             return issue
     raise ValueError(f"issue not found: {repo}#{number}")
+
+
+def get_issue(repo: str, number: int) -> dict:
+    return _issue(load_world(), repo, number)
 
 
 def get_file(repo: str, path: str) -> str:
@@ -44,6 +51,31 @@ def create_pull_request(repo: str, title: str, body: str) -> dict:
     return pr
 
 
+# The three tools below exist for the scripted attacks in agent/scoreboard.py. They are not in TOOL_SPECS,
+# so the live agent still only has the five tools above.
+def add_issue_comment(repo: str, number: int, body: str) -> dict:
+    world = load_world()
+    comment = {"author": USER, "body": body}
+    _issue(world, repo, number).setdefault("comments", []).append(comment)
+    save_world(world)
+    return comment
+
+
+def update_file(repo: str, path: str, content: str) -> dict:
+    world = load_world()
+    _repo(world, repo)["files"][path] = content
+    save_world(world)
+    return {"repo": repo, "path": path, "bytes": len(content)}
+
+
+def delete_repo(repo: str) -> dict:
+    world = load_world()
+    _repo(world, repo)
+    del world["repos"][repo]
+    save_world(world)
+    return {"deleted": repo}
+
+
 def public_view(repo: str) -> dict:
     """What an outsider sees: PRs on a public repo, nothing on a private one."""
     r = _repo(load_world(), repo)
@@ -52,8 +84,8 @@ def public_view(repo: str) -> dict:
 
 
 def provenance_for(tool: str, args: dict, output) -> Provenance:
-    if tool == "list_repos":
-        return {"source": "tool_meta", "author": None, "trusted": True, "repo": None, "visibility": None}
+    if tool in ("list_repos", "delete_repo"):  # delete_repo: the repo no longer exists to look up
+        return {"source": "tool_meta", "author": None, "trusted": True, "repo": args.get("repo"), "visibility": None}
     repo = args["repo"]
     r = _repo(load_world(), repo)
     owner = r["owner"]
@@ -64,7 +96,7 @@ def provenance_for(tool: str, args: dict, output) -> Provenance:
     else:
         author = owner
     source = {"get_issue": "issue", "list_issues": "issue", "get_file": "repo_file"}.get(tool, "tool_meta")
-    return {"source": source, "author": author, "trusted": author == owner, "repo": repo,
+    return {"source": source, "author": author, "trusted": author == USER, "repo": repo,
             "visibility": r["visibility"]}
 
 
