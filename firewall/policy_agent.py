@@ -43,6 +43,8 @@ _client: Optional[genai.Client] = None
 def _summary(session: Session) -> str:
     parts = [f"untrusted {t['source']} by {t['author']} in {t['repo']}" for t in session["taint_sources"]]
     parts += [f"private file {r['repo']}/{r['path']}" for r in session["private_reads"]]
+    parts += [f"scanner found a hidden instruction ({f['technique']}) in {f['where']}: \"{f['text'][:150]}\""
+              for f in session.get("findings", [])]
     return "; ".join(parts) or "nothing yet"
 
 
@@ -86,10 +88,11 @@ def _parse(text: str) -> dict:
             "reason": out["reason"].strip()}
 
 
-def _start(name: str, generate: Callable[[str, float], str], prompt: str, deadline: float, q: queue.Queue) -> None:
+def _start(name: str, generate: Callable[[str, float], str], parse: Callable[[str], dict], prompt: str,
+           deadline: float, q: queue.Queue) -> None:
     def run() -> None:
         try:
-            q.put((name, _parse(generate(prompt, deadline))))
+            q.put((name, parse(generate(prompt, deadline))))
         except Exception:
             q.put((name, None))
     # daemon thread: a slow request never blocks check() past the deadline, or the program from exiting
@@ -98,21 +101,26 @@ def _start(name: str, generate: Callable[[str, float], str], prompt: str, deadli
 
 def ask_policy(session: Session, call: ToolCall) -> Optional[dict]:
     """Returns {"matches_request", "instruction_source", "reason", "provider"} or None."""
+    prompt = PROMPT.format(request=session["user_request"], tool=call["tool"],
+                           args=json.dumps(call["args"])[:2000], summary=_summary(session))
+    return ask_json(prompt, _parse)
+
+
+def ask_json(prompt: str, parse: Callable[[str], dict]) -> Optional[dict]:
+    """Gemini first, Groq too after GROQ_AFTER_S; the first answer that parses wins. None if both fail or time out."""
     gemini_on, groq_on = bool(os.getenv("GEMINI_API_KEY")), bool(os.getenv("GROQ_API_KEY"))
     if not (gemini_on or groq_on):
         return None
-    prompt = PROMPT.format(request=session["user_request"], tool=call["tool"],
-                           args=json.dumps(call["args"])[:2000], summary=_summary(session))
     start = time.monotonic()
     deadline, q, running = start + TIMEOUT_S, queue.Queue(), 0
     if gemini_on:
-        _start("gemini", _gemini, prompt, deadline, q)
+        _start("gemini", _gemini, parse, prompt, deadline, q)
         running += 1
     groq_waiting = groq_on
     while True:
         now = time.monotonic()
         if groq_waiting and (not running or now >= start + GROQ_AFTER_S):
-            _start("groq", _groq, prompt, deadline, q)
+            _start("groq", _groq, parse, prompt, deadline, q)
             running, groq_waiting = running + 1, False
             continue
         if not running or now >= deadline:
