@@ -1,10 +1,12 @@
 """B4 test. Run: uv run python -m firewall.test_policy
 Part 1 uses a stand-in policy agent; part 2 switches Gemini off; part 3 calls real Gemini if GEMINI_API_KEY is set."""
 import os
+import tempfile
 import time
+from pathlib import Path
 
 import firewall.interceptor as ic
-from firewall import policy_agent
+from firewall import logger, policy_agent
 from firewall.rules import R1_REASON
 from firewall.session import new_session
 from shared.fakes import DEMO_REQUEST
@@ -22,6 +24,7 @@ def tainted():
     return s
 
 
+logger.LOG_PATH = Path(tempfile.mkdtemp()) / "audit.jsonl"  # keep the real audit log clean
 real_ask = ic.ask_policy
 asked = []
 

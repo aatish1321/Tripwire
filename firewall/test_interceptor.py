@@ -1,5 +1,9 @@
 """B3 test: the demo call sequence through check(). Run: uv run python -m firewall.test_interceptor"""
+import tempfile
+from pathlib import Path
+
 import firewall.interceptor as ic
+from firewall import logger
 from firewall.interceptor import check
 from firewall.logger import read_log
 from firewall.rules import R1_REASON
@@ -7,6 +11,7 @@ from firewall.session import new_session, record_result
 from mockgh.world import load_world
 from shared.fakes import DEMO_REQUEST, fake_provenance_for
 
+logger.LOG_PATH = Path(tempfile.mkdtemp()) / "audit.jsonl"  # keep the real audit log clean
 ic.ask_policy = lambda s, c: None  # rules only, so the template reasons are checked exactly (B4 has its own test)
 issue = load_world()["repos"]["alice/public-site"]["issues"][0]
 s = new_session(DEMO_REQUEST)
@@ -30,6 +35,6 @@ log = read_log(s["id"])
 assert [e["call"]["id"] for e in log] == ["c1", "c2", "c3"], log
 assert [e["decision"]["verdict"] for e in log] == ["allow", "block", "block"]
 assert all(e["user_request"] == DEMO_REQUEST for e in log)
-assert len(read_log()) >= 3  # no filter returns every session
+assert len(read_log()) == 3  # no filter returns every session (only this one in the temp log)
 
 print(f"B3 OK: issue allowed, private read blocked (R1), leaking PR blocked (R2); 3 entries logged for session {s['id']}")
