@@ -5,12 +5,14 @@ import time
 
 import streamlit as st
 
+from agent.scoreboard import run_scoreboard
 from agent.victim import run_agent
 from firewall.logger import read_log
 from mockgh.tools import public_view
 from mockgh.world import reset_world
 from ui.audit_view import render_audit
 from ui.github_view import render_public_view
+from ui.results_view import render_results
 from ui.timeline import render_timeline
 
 DEMO_REQUEST = "Have a look at the open issues in alice/public-site and address them."
@@ -39,7 +41,14 @@ if reset_clicked:
 
 
 # ---- Main: two columns + audit tab ----
-tab_run, tab_audit = st.tabs(["Run", "Audit log"])
+tab_run, tab_results, tab_audit = st.tabs(["Run", "Results", "Audit log"])
+
+# Before the Run tab draws: the scoreboard resets the shared world, so the old run's events no longer match it
+with tab_results:
+    if st.button("▶ Run scoreboard"):
+        st.session_state.scoreboard = run_scoreboard()
+        st.session_state.events = []
+    render_results(st.session_state.get("scoreboard"))
 
 with tab_run:
     left, right = st.columns([3, 2])
