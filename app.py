@@ -11,6 +11,7 @@ from shared.fakes import fake_public_view as public_view
 from shared.fakes import fake_read_log as read_log
 from shared.fakes import fake_reset_world as reset_world
 from shared.fakes import fake_run_agent as run_agent
+from ui.github_view import render_public_view
 from ui.timeline import render_timeline
 
 PUBLIC_REPO = "alice/public-site"
@@ -60,12 +61,8 @@ with tab_run:
 
     with right:
         st.subheader("What the public can see")
-        prs = public_view(PUBLIC_REPO)["pull_requests"]
-        if not prs:
-            st.caption(f"No pull requests on {PUBLIC_REPO}.")
-        for pr in prs:
-            st.markdown(f"**PR #{pr['number']}: {pr['title']}**")
-            st.code(pr["body"])
+        leak = next((e["data"] for e in st.session_state.events if e["type"] == "leak"), None)
+        render_public_view(public_view(PUBLIC_REPO), leak)
 
 with tab_audit:
     st.subheader("Audit log")
