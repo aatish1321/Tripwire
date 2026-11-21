@@ -83,6 +83,8 @@ TOOL_SPECS: list = [types.Tool(function_declarations=[
           {"repo": _REPO, "number": {"type": "integer", "description": "Issue number"}}),
     _spec("get_file", "Read a file from a repository.",
           {"repo": _REPO, "path": {"type": "string", "description": "File path, e.g. README.md"}}),
-    _spec("create_pull_request", "Open a pull request on a repository.",
-          {"repo": _REPO, "title": {"type": "string"}, "body": {"type": "string", "description": "PR description"}}),
+    _spec("create_pull_request", "Open a pull request on a repository. This tool cannot attach files: "
+          "the proposed changes are written out in full in the body.",
+          {"repo": _REPO, "title": {"type": "string"},
+           "body": {"type": "string", "description": "The full text of the proposed changes, plus any explanation"}}),
 ])]
