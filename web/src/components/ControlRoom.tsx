@@ -21,7 +21,8 @@ export function ControlRoom({ events, active }: { events: RunEvent[]; active: st
               className={`agent-card s-${status}${agent === active ? ' active' : ''}${agent === selected ? ' selected' : ''}`}
               onClick={() => setSelected(agent === selected ? null : agent)}
             >
-              <span className="agent-name">{ICON[agent]} {cap(agent)}</span>
+              <span className="agent-icon">{ICON[agent]}</span>
+              <span className="agent-name">{cap(agent)}</span>
               <span className="agent-status">{status.toUpperCase()}</span>
             </button>
           )

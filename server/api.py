@@ -19,7 +19,7 @@ from mockgh.world import reset_world
 PUBLIC_REPO = "alice/public-site"
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
-app = FastAPI(title="Agent Firewall API")
+app = FastAPI(title="TripWire API")
 # shortcut: a single-user demo server (one shared world file and one set_enabled), a real product would isolate each run
 _run_lock = threading.Lock()
 

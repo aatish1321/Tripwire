@@ -78,8 +78,21 @@ export default function App() {
   }
 
   return (
+    <>
+    <div className="bubbles" aria-hidden="true"><span /><span /><span /><span /><span /></div>
     <div className="app">
-      <h1>🛡️ Agent Firewall: a security guard for AI agents</h1>
+      <header className="brand">
+        <svg className="logo" viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="24" r="22" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" />
+          <path d="M6 30 L19 30 L24 20 L29 30 L42 30" fill="none" stroke="#7dd3fc" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="24" cy="20" r="4.2" fill="#ff3b5c" />
+        </svg>
+        <div>
+          <h1><span className="wire">TripWire</span></h1>
+          <p className="tagline">A security guard for AI agents: every action is checked before it runs.</p>
+        </div>
+        <span className={`status-pill ${firewallOn ? 's-ok' : 's-block'}`}><i />{firewallOn ? 'Protection on' : 'Protection off'}</span>
+      </header>
 
       <section className="controls">
         <label className="request">
@@ -88,7 +101,7 @@ export default function App() {
         </label>
         <div className="row">
           <label className="switch">
-            <input type="checkbox" checked={firewallOn} onChange={(e) => setFirewallOn(e.target.checked)} /> Firewall ON
+            <input type="checkbox" checked={firewallOn} onChange={(e) => setFirewallOn(e.target.checked)} /> TripWire ON
           </label>
           <div className="modes">
             {(['fake', 'replay', 'live'] as Mode[]).map((m) => (
@@ -112,8 +125,8 @@ export default function App() {
 
       {outcomes.off && outcomes.on && (
         <div className="before-after">
-          <div className={outcomes.off.leaked ? 'ba bad' : 'ba good'}><b>Before: firewall OFF</b> {outcomes.off.text}</div>
-          <div className={outcomes.on.leaked ? 'ba bad' : 'ba good'}><b>After: firewall ON</b> {outcomes.on.text}</div>
+          <div className={outcomes.off.leaked ? 'ba bad' : 'ba good'}><b>Before: TripWire OFF</b> {outcomes.off.text}</div>
+          <div className={outcomes.on.leaked ? 'ba bad' : 'ba good'}><b>After: TripWire ON</b> {outcomes.on.text}</div>
         </div>
       )}
 
@@ -142,5 +155,6 @@ export default function App() {
       {tab === 'results' && <Results disabled={busy} layers={layers} />}
       {tab === 'audit' && <AuditLog />}
     </div>
+    </>
   )
 }
