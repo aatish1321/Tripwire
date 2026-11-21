@@ -1,7 +1,7 @@
 """Fake GitHub tools over mockgh/world.json. Tools raise ValueError on unknown repos, files or issues."""
 from google.genai import types
 
-from mockgh import machine
+from mockgh import machine, realgh
 from mockgh.world import load_world, save_world
 from shared.contracts import Provenance
 
@@ -9,15 +9,29 @@ from shared.contracts import Provenance
 USER = "alice"  # the person the agent works for; only their own content is trusted
 
 
+def _repo_name(world: dict, repo: str) -> str:
+    """The world's key for `repo`. GitHub names ignore case. In Live runs, a repo the fake world doesn't have is copied
+    in from real GitHub (read-only, public only); see mockgh/realgh.py."""
+    if repo in world["repos"]:
+        return repo
+    name = next((n for n in world["repos"] if n.lower() == str(repo).lower()), None)
+    if name:
+        return name
+    if realgh.ENABLED:
+        name = realgh.import_repo(world, repo)
+        save_world(world)
+        return name
+    raise ValueError(f"repo not found: {repo}")
+
+
 def _repo(world: dict, repo: str) -> dict:
-    if repo not in world["repos"]:
-        raise ValueError(f"repo not found: {repo}")
-    return world["repos"][repo]
+    return world["repos"][_repo_name(world, repo)]
 
 
 def list_repos(owner: str) -> list[dict]:
     repos = load_world()["repos"]
-    return [{"name": n, "visibility": r["visibility"]} for n, r in repos.items() if r["owner"] == owner]
+    found = [{"name": n, "visibility": r["visibility"]} for n, r in repos.items() if r["owner"] == owner]
+    return found or (realgh.list_public_repos(owner) if realgh.ENABLED else [])
 
 
 def list_issues(repo: str) -> list[dict]:
@@ -37,9 +51,19 @@ def get_issue(repo: str, number: int) -> dict:
 
 
 def get_file(repo: str, path: str) -> str:
-    files = _repo(load_world(), repo)["files"]
+    world = load_world()
+    name = _repo_name(world, repo)
+    r = world["repos"][name]
+    files = r["files"]
+    path = path.strip("/")
     if path not in files:
+        inside = sorted(p for p in files if p.startswith(path + "/")) if path else sorted(files)
+        if r.get("real") and inside:  # a folder of a real repo: list what's in it
+            return "Folder contents:\n" + "\n".join(inside[:100])
         raise ValueError(f"file not found: {repo}/{path}")
+    if files[path] is None:  # a real repo's file, not downloaded yet
+        files[path] = realgh.read_file(r, name, path)
+        save_world(world)
     return files[path]
 
 
@@ -129,8 +153,10 @@ def provenance_for(tool: str, args: dict, output) -> Provenance:
     else:
         author = owner
     source = {"get_issue": "issue", "list_issues": "issue", "get_file": "repo_file"}.get(tool, "tool_meta")
-    return {"source": source, "author": author, "trusted": author == USER, "repo": repo,
-            "visibility": r["visibility"]}
+    # a real repo's own files were written by its owner, the project the user asked about; its issues from anyone else
+    # are a stranger's text, exactly like mallory's issue
+    trusted = author == USER or (r.get("real", False) and author == owner)
+    return {"source": source, "author": author, "trusted": trusted, "repo": repo, "visibility": r["visibility"]}
 
 
 def _spec(name: str, description: str, props: dict) -> types.FunctionDeclaration:

@@ -109,7 +109,8 @@ def _writes_public(call: ToolCall) -> bool:
 
 def r1_scope_taint(session: Session, call: ToolCall) -> Result:
     repo = call["args"].get("repo")
-    if session["tainted"] and repo and repo not in session["mentioned_repos"]:
+    # GitHub repo names ignore case, and models often change it: "zonetecde/qurancaption" is still the repo the user named
+    if session["tainted"] and repo and str(repo).lower() not in {m.lower() for m in session["mentioned_repos"]}:
         return "R1", R1_REASON
     return None
 

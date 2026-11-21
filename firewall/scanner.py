@@ -65,8 +65,9 @@ def _patterns(field: str, text: str, untrusted: bool) -> list[dict]:
     for m in TAG_CHARS.finditer(text):
         found.append({"field": field, "text": m.group(), "technique": "invisible_characters",
                       "decoded": "".join(chr(ord(c) - 0xE0000) for c in m.group())})
-    for m in ZERO_WIDTH.finditer(text):
-        found.append({"field": field, "text": m.group(), "technique": "zero_width_characters"})
+    if untrusted:  # zero-width joiners are ordinary in Arabic, Persian and Indic text, so the owner's own code may use them
+        for m in ZERO_WIDTH.finditer(text):
+            found.append({"field": field, "text": m.group(), "technique": "zero_width_characters"})
     for m in HTML_COMMENT.finditer(text):
         found.append({"field": field, "text": m.group(), "technique": "html_comment"})
     for m in MARKDOWN_COMMENT.finditer(text):

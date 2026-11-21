@@ -55,6 +55,8 @@ assert techniques("Great site! Small feature request: add info about the author"
 for repo in load_world()["repos"].values():
     for text in repo["files"].values():
         assert scan(text, ALICE_PRIVATE, use_llm=False) == [], text
+# zero-width joiners in the owner's own code are normal (Arabic, Persian, Indic text), found in a real repo's Rust file
+assert scan('let word = "مي‌خواهم";', ALICE_PRIVATE, use_llm=False) == []
 
 # --- Scanner LLM pass: only exact quotes count, so it can't invent evidence
 real_ask = scanner.ask_json

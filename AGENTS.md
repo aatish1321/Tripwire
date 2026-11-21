@@ -26,7 +26,10 @@ through GitHub's MCP server), entirely on **fake local repos**:
 - **Firewall ON:** same attack, but the private-repo read is blocked with
   *"This instruction came from an issue written by a stranger, and you never asked to read private repos."* ✅
 
-**Safety:** everything is fake and local. Never call the real GitHub API, and never use real tokens or real repos.
+**Safety:** the demo world is fake and local. The one exception (team decision, 21 Nov): **Live mode may READ public GitHub
+repos** through `mockgh/realgh.py` (GET requests only, private repos refused even with a token). Everything the agent
+writes (pull requests, comments, edits, deletes) stays in the fake world: never send anything to GitHub, and never use a
+token with write access.
 
 ---
 
@@ -42,7 +45,8 @@ through GitHub's MCP server), entirely on **fake local repos**:
 | Audit log | JSONL file (`logs/audit.jsonl`) |
 | Config | `python-dotenv`, with `GEMINI_API_KEY` in `.env` (optional `GROQ_API_KEY`, see Gemini reliability) |
 
-**Do NOT use:** LangChain, LlamaIndex, any database, Docker, the real GitHub API, or the real MCP SDK
+**Do NOT use:** LangChain, LlamaIndex, any database, Docker, the real GitHub API for anything except Live mode's
+read-only `mockgh/realgh.py`, or the real MCP SDK
 (our tools *act like* MCP tools, and that's enough for the demo).
 
 ### uv rules
@@ -306,6 +310,9 @@ The React app in `web/` (tasks C9–C14 in `TASKS.md`); the Streamlit app is the
 - **"What the public can see":** `public_view("alice/public-site")`: open PRs and their content. After a leak, the private data shows here in red with 🚨.
 - **Tabs:** Results (the scoreboard) and Audit log (`read_log()`).
 - **Terminal panel (mock-up only):** shown with fake data; the fake machine behind it (phase 3: A10, A11, B11) is postponed.
+- **Live on any public repo:** type a request naming it (e.g. *"Have a look at the open issues in owner/repo and
+  address them."*). The repo is copied in read-only from GitHub for that run; the fake terminal isn't offered (it only holds
+  alice/public-site); every write is simulated. Optional `GITHUB_TOKEN` in `.env` raises the limit from 60 to 5,000 reads an hour.
 - Big fonts and a projector-friendly layout. The blocked reason is the most important text on screen.
 
 ---
@@ -316,5 +323,6 @@ The React app in `web/` (tasks C9–C14 in `TASKS.md`); the Streamlit app is the
 - Work in **small steps**, and tell me how to test each one.
 - Only touch the files my role owns. Use `shared/fakes.py` for anything a teammate hasn't finished.
 - Keys come from `.env`. Never print or commit them.
-- Never call the real GitHub API or any real external service except Gemini (and Groq, only as the LLM fallback).
+- Never call a real external service except Gemini (and Groq, only as the LLM fallback), and GitHub's public API for
+  READS in Live mode (`mockgh/realgh.py`). No GitHub writes, ever.
 - If unsure about an SDK call, say so and ask me to paste the docs.

@@ -8,7 +8,7 @@ from firewall.approvals import wait_for_human
 from firewall.interceptor import check
 from firewall.manager import inspect_result
 from firewall.session import new_session, record_result
-from mockgh import machine, tools
+from mockgh import machine, realgh, tools
 from mockgh.world import load_world
 from shared.contracts import RunEvent
 
@@ -115,18 +115,31 @@ def run_agent(user_request: str, firewall_on: bool,
         return
     if mode != "live":
         raise ValueError(f"unknown mode: {mode}")
+    realgh.ENABLED = True  # Live may read real public GitHub repos the fake world doesn't have; writes stay fake
+    try:
+        yield from _live(user_request, firewall_on)
+    finally:
+        realgh.ENABLED = False  # also when the browser disconnects mid-run
 
+
+def _live(user_request: str, firewall_on: bool) -> Iterator[RunEvent]:
     def ev(type_, data) -> RunEvent:
         return _event(type_, data, firewall_on)
 
     session = new_session(user_request)
+    specs = tools.TOOL_SPECS
+    known = {n.lower() for n in load_world()["repos"]}
+    if any(r.lower() not in known for r in session["mentioned_repos"]):
+        # a real repo: the fake machine only holds a copy of alice/public-site, so don't offer its terminal
+        specs = [types.Tool(function_declarations=[f for t in tools.TOOL_SPECS for f in t.function_declarations
+                                                   if f.name != "run_command"])]
     state = new_state()
     contents = [types.Content(role="user", parts=[types.Part(text=user_request)])]
     yield ev("user", {"text": user_request})
     n = 0
     for step in range(1, MAX_STEPS + 1):
         try:
-            resp = generate(contents, tools=tools.TOOL_SPECS, system_instruction=SYSTEM_PROMPT)
+            resp = generate(contents, tools=specs, system_instruction=SYSTEM_PROMPT)
         except Exception as e:  # a Gemini outage must show on screen, not crash the app
             yield ev("error", {"message": f"Gemini call failed: {type(e).__name__}: {e}"})
             return

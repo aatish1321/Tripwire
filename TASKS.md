@@ -7,7 +7,7 @@
 - A task is finished only when its **Done when** check passes.
 - Use `shared/fakes.py` for anything a teammate hasn't finished yet.
 - Never change `shared/contracts.py` unless the user confirms the whole team agreed.
-- Never call the real GitHub API. Everything is fake and local.
+- Never call the real GitHub API, except Live mode's read-only `mockgh/realgh.py` (team decision, 21 Nov). No GitHub writes.
 
 Roles: **A = Attack side** (`mockgh/`, `agent/`) · **B = Firewall** (`firewall/`) · **C = Screen + Pitch** (`app.py`, `ui/`, and from phase 2 `server/`, `web/`)
 
