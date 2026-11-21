@@ -81,3 +81,19 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .detail { border-left: 4px solid var(--c); padding: 0.3rem 0.8rem; margin: 0.5rem 0; }
 .detail .status-text { color: var(--c); }
 .detail ul { margin: 0.3rem 0; padding-left: 1.2rem; }
+
+/* C12: public view, results, audit */
+.run h2.spaced { margin-top: 1.6rem; }
+.public { display: grid; gap: 0.7rem; }
+.pr-body { margin: 0.4rem 0 0; white-space: pre-wrap; word-break: break-word; font-size: 1rem; }
+.pr-body mark { background: #ff4b4b; color: white; border-radius: 0.2rem; padding: 0 0.15rem; }
+.results { display: grid; gap: 1rem; justify-items: start; }
+.score-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; width: 100%; }
+.score { border: 2px solid var(--c); border-radius: 0.8rem; padding: 1rem 1.4rem; background: color-mix(in srgb, var(--c) 10%, var(--panel)); }
+.score h3 { margin: 0 0 0.4rem; }
+.score .big { font-size: 2.6rem; font-weight: 800; line-height: 1.1; margin-top: 0.5rem; }
+.table { width: 100%; border-collapse: collapse; margin-top: 0.8rem; font-size: 1rem; }
+.table th, .table td { text-align: left; padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.table th { color: var(--muted); font-weight: 600; }
+.row-block td { background: rgba(255, 75, 75, 0.18); }
+.warn { color: #ffb020; font-weight: 700; }

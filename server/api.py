@@ -70,11 +70,12 @@ def audit():
 
 
 @app.get("/api/scoreboard")
-def scoreboard():
+def scoreboard(scanner: int = 1, sanitizer: int = 1, guard: int = 1, judge: int = 1):
     if not _run_lock.acquire(blocking=False):  # it rewrites the shared world file
         raise HTTPException(409, "a run is in progress")
     try:
-        return json.loads(_json(run_scoreboard()))
+        layers = {"scanner": bool(scanner), "sanitizer": bool(sanitizer), "guard": bool(guard), "judge": bool(judge)}
+        return json.loads(_json(run_scoreboard(layers=layers)))
     finally:
         _run_lock.release()
 

@@ -1,5 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AuditLog } from './components/AuditLog'
 import { ControlRoom } from './components/ControlRoom'
+import { PublicView } from './components/PublicView'
+import { Results } from './components/Results'
 import { Timeline } from './components/Timeline'
 import { usePlayback } from './playback'
 import type { RunEvent } from './types'
@@ -21,6 +24,12 @@ export default function App() {
   const source = useRef<EventSource | null>(null)
   const { visible, active, done } = usePlayback(events)
   const busy = running || !done // still streaming, or still playing back what arrived
+  const [refresh, setRefresh] = useState(0) // bump to re-read the public view
+  useEffect(() => {
+    if (!busy) setRefresh((n) => n + 1)
+  }, [busy])
+  // only PR leaks carry private_text; "private_read" leaks don't put anything in public
+  const leaked: string[] = visible.filter((e) => e.type === 'leak').flatMap((e) => e.data.private_text ?? [])
 
   function stop() {
     source.current?.close()
@@ -54,6 +63,7 @@ export default function App() {
     stop()
     await fetch('/api/reset', { method: 'POST' })
     setEvents([])
+    setRefresh((n) => n + 1)
   }
 
   return (
@@ -106,11 +116,13 @@ export default function App() {
           <section>
             <h2>Agent control room</h2>
             <ControlRoom events={visible} active={active} />
+            <h2 className="spaced">What the public can see</h2>
+            <PublicView refresh={refresh} leaked={leaked} waiting={busy} />
           </section>
         </div>
       )}
-      {tab === 'results' && <p className="muted">Results: coming in C12.</p>}
-      {tab === 'audit' && <p className="muted">Audit log: coming in C12.</p>}
+      {tab === 'results' && <Results disabled={busy} layers={layers} />}
+      {tab === 'audit' && <AuditLog />}
     </div>
   )
 }

@@ -58,4 +58,4 @@ export type ScoreRow = {
   reason: string | null
 }
 
-export type Scoreboard = { off: ScoreSummary; on: ScoreSummary; rows: ScoreRow[] }
+export type Scoreboard = { off: ScoreSummary; on: ScoreSummary; rows: ScoreRow[]; layers?: Record<string, boolean> }
