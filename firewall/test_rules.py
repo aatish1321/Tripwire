@@ -54,4 +54,13 @@ assert r3_trifecta(session(tainted=True), pr_harmless) is None  # no private rea
 # a normal task with no evil issue: a PR on the mentioned public repo is allowed
 assert first_objection(session(), pr_harmless) is None
 
-print("B2 OK: R1, R2, R3 block; normal calls allowed")
+# R4: a stranger's text asks to delete a repo the user named (R1 can't fire)
+delete_pub = call("delete_repo", repo="alice/public-site")
+assert r1_scope_taint(session(tainted=True), delete_pub) is None
+assert first_objection(session(tainted=True), delete_pub)[0] == "R4"
+assert first_objection(session(), delete_pub) is None  # no stranger's text read
+asked = new_session("Delete the alice/public-site repo, I don't need it any more")
+asked["tainted"] = True
+assert first_objection(asked, delete_pub) is None  # the user asked for the delete
+
+print("B2 OK: R1, R2, R3, R4 block; normal calls allowed")

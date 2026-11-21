@@ -1,4 +1,5 @@
-"""B2: deterministic rules. Each returns None (no objection) or (rule_id, template_reason)."""
+"""B2/B6: deterministic rules. Each returns None (no objection) or (rule_id, template_reason)."""
+import re
 from typing import Optional
 
 from firewall.session import Session
@@ -10,6 +11,8 @@ MIN_LINE = 12  # shorter private lines are too generic to count as a leak
 
 R1_REASON = "This instruction came from an issue written by a stranger, and you never asked to read private repos."
 R2_REASON = "This would copy text from your private repo into a public place where anyone can read it."
+R4_REASON = "A stranger's text asked to delete something, and you never asked to delete anything."
+DELETE_WORDS = re.compile(r"\b(delete|remove|destroy|erase|wipe)\b", re.IGNORECASE)
 R3_REASON = ("The agent has followed a stranger's instructions and read your private data, "
              "so it is not allowed to publish anything publicly now.")
 
@@ -61,4 +64,11 @@ def r3_trifecta(session: Session, call: ToolCall) -> Result:
     return None
 
 
-RULES = [r1_scope_taint, r2_data_leaving, r3_trifecta]  # B3: the first one that objects decides
+def r4_destructive(session: Session, call: ToolCall) -> Result:
+    # R1 misses a delete of a repo the user named; only the user's own words may ask for a delete
+    if session["tainted"] and call["tool"].startswith("delete_") and not DELETE_WORDS.search(session["user_request"]):
+        return "R4", R4_REASON
+    return None
+
+
+RULES = [r1_scope_taint, r2_data_leaving, r3_trifecta, r4_destructive]  # B3: the first one that objects decides
