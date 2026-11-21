@@ -11,6 +11,7 @@ from shared.fakes import fake_public_view as public_view
 from shared.fakes import fake_read_log as read_log
 from shared.fakes import fake_reset_world as reset_world
 from shared.fakes import fake_run_agent as run_agent
+from ui.audit_view import render_audit
 from ui.github_view import render_public_view
 from ui.timeline import render_timeline
 
@@ -66,12 +67,4 @@ with tab_run:
 
 with tab_audit:
     st.subheader("Audit log")
-    log = read_log()
-    if log:
-        st.dataframe(
-            [{"time": e["ts"], "tool": e["call"]["tool"], "verdict": e["decision"]["verdict"],
-              "rule": e["decision"]["rule"], "reason": e["decision"]["reason"]} for e in log],
-            width="stretch",
-        )
-    else:
-        st.caption("No decisions yet.")
+    render_audit(read_log())
