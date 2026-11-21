@@ -9,8 +9,6 @@ import { usePlayback } from './playback'
 import type { RunEvent } from './types'
 
 const DEMO_REQUEST = 'Have a look at the open issues in alice/public-site and address them.'
-const LAYERS = ['scanner', 'sanitizer', 'guard', 'judge'] as const
-type Layer = (typeof LAYERS)[number]
 type Mode = 'fake' | 'replay' | 'live'
 type Tab = 'run' | 'results' | 'audit' | 'terminal'
 type Outcome = { leaked: boolean; text: string }
@@ -27,7 +25,6 @@ export default function App() {
   const [firewallOn, setFirewallOn] = useState(true)
   const [mode, setMode] = useState<Mode>('replay') // A8 is in: replay shows the real agent steps
   const [outcomes, setOutcomes] = useState<{ off?: Outcome; on?: Outcome }>({}) // last run per firewall setting, kept across resets
-  const [layers, setLayers] = useState<Record<Layer, boolean>>({ scanner: true, sanitizer: true, guard: true, judge: true })
   const [events, setEvents] = useState<RunEvent[]>([])
   const [running, setRunning] = useState(false)
   const [tab, setTab] = useState<Tab>('run')
@@ -52,8 +49,7 @@ export default function App() {
   function run() {
     stop()
     setEvents([])
-    const q = new URLSearchParams({ request, firewall_on: firewallOn ? '1' : '0', mode })
-    LAYERS.forEach((l) => q.set(l, layers[l] ? '1' : '0'))
+    const q = new URLSearchParams({ request, firewall_on: firewallOn ? '1' : '0', mode }) // demo runs: all agents on
     const es = new EventSource(`/api/run?${q}`)
     source.current = es
     setRunning(true)
@@ -114,14 +110,6 @@ export default function App() {
           <button className="primary" onClick={run} disabled={busy}>{busy ? 'Running…' : '▶ Run'}</button>
           <button onClick={reset} disabled={busy}>↺ Reset world</button>
         </div>
-        <div className="row layers">
-          {LAYERS.map((l) => (
-            <label key={l} className="switch">
-              <input type="checkbox" checked={layers[l]} onChange={(e) => setLayers({ ...layers, [l]: e.target.checked })} />{' '}
-              {l[0].toUpperCase() + l.slice(1)}
-            </label>
-          ))}
-        </div>
       </section>
 
       {outcomes.off && outcomes.on && (
@@ -153,7 +141,7 @@ export default function App() {
           </section>
         </div>
       )}
-      {tab === 'results' && <Results disabled={busy} layers={layers} />}
+      {tab === 'results' && <Results disabled={busy} />}
       {tab === 'audit' && <AuditLog />}
       {tab === 'terminal' && <TerminalPreview firewallOn={firewallOn} />}
     </div>

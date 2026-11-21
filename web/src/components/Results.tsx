@@ -16,10 +16,12 @@ const layerNote = (layers: Record<string, boolean>) => {
 }
 
 /** A7/A9's scoreboard: every scripted attack and normal task, firewall off vs on. */
-export function Results({ disabled, layers }: { disabled: boolean; layers: Record<string, boolean> }) {
+export function Results({ disabled }: { disabled: boolean }) {
   const [board, setBoard] = useState<Scoreboard | null>(null)
   const [error, setError] = useState('')
-  const off = Object.keys(layers).filter((l) => !layers[l])
+  // only here, not on the main screen: untick an agent to show what only it catches (e.g. Scanner off: 1/9 gets through)
+  const [layers, setLayers] = useState<Record<string, boolean>>(Object.fromEntries(AGENT_KEYS.map((k) => [k, true])))
+  const off = AGENT_KEYS.filter((l) => !layers[l])
 
   async function load() {
     setError('')
@@ -35,7 +37,12 @@ export function Results({ disabled, layers }: { disabled: boolean; layers: Recor
       {/* the scoreboard rewrites the shared world file, so never while a demo run is going */}
       <div className="row">
         <button className="primary" onClick={load} disabled={disabled}>▶ Run scoreboard</button>
-        {/* the agent switches above apply to the "on" runs, e.g. untick Scanner to show what only it catches */}
+        {AGENT_KEYS.map((l) => (
+          <label key={l} className="switch">
+            <input type="checkbox" checked={layers[l]} onChange={(e) => setLayers({ ...layers, [l]: e.target.checked })} />{' '}
+            {l[0].toUpperCase() + l.slice(1)}
+          </label>
+        ))}
         <span className={off.length ? 'warn' : 'muted'}>
           {off.length ? `With ${off.map((l) => l[0].toUpperCase() + l.slice(1)).join(', ')} switched off` : 'All agents on'}
         </span>
