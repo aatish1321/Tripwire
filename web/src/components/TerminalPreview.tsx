@@ -52,14 +52,14 @@ export function TerminalPreview({ firewallOn }: { firewallOn: boolean }) {
   return (
     <div className="term-wrap">
       <div className="term-banner">
-        🚧 <b>Preview, not connected yet.</b> A command-line version of the firewall for coding agents that run shell commands.
+        🚧 <b>Preview, not connected yet.</b> A command-line version of TripWire for coding agents that run shell commands.
         Fake data for now: in production the agent's commands run in a sandbox behind the same firewall.
       </div>
       <div className="row">
         <button className="primary" disabled={playing} onClick={() => { setStory(firewallOn); setShown(0) }}>
           ▶ Play terminal demo
         </button>
-        <span className="muted">Uses the Firewall ON switch above (now {firewallOn ? 'ON' : 'OFF'}).</span>
+        <span className="muted">Uses the TripWire ON switch above (now {firewallOn ? 'ON' : 'OFF'}).</span>
       </div>
 
       <div className="term-cols">
@@ -68,7 +68,7 @@ export function TerminalPreview({ firewallOn }: { firewallOn: boolean }) {
           {shown >= 0 && (
             <>
               <div className="term-line"><span className="prompt">$</span> {CLI}</div>
-              <div className="term-out">🛡️ Agent Firewall {story ? 'ON: 5 agents guarding every command' : 'OFF: commands run unchecked'}</div>
+              <div className="term-out">🛡️ TripWire {story ? 'ON: 5 agents guarding every command' : 'OFF: commands run unchecked'}</div>
             </>
           )}
           {steps.map((s, i) => {
