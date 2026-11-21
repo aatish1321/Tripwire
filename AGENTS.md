@@ -40,7 +40,7 @@ through GitHub's MCP server), entirely on **fake local repos**:
 | Models | `GEMINI_MODEL = "gemini-3.5-flash-lite"`, `GEMINI_FALLBACK_MODEL = "gemini-3.8-flash"` (chosen on 21 Nov: 3.8-flash returned 503 "high demand", and tool-calling requests to 3.6-flash timed out with 504; 3.5-flash-lite passed the A3 live test) |
 | Fake GitHub | Plain Python functions over a JSON file (`mockgh/world.json`). No real server, no real API |
 | Audit log | JSONL file (`logs/audit.jsonl`) |
-| Config | `python-dotenv`, with `GEMINI_API_KEY` in `.env` |
+| Config | `python-dotenv`, with `GEMINI_API_KEY` in `.env` (optional `GROQ_API_KEY`, see Gemini reliability) |
 
 **Do NOT use:** LangChain, LlamaIndex, any database, Docker, a separate frontend, the real GitHub API, or the real MCP SDK
 (our tools *act like* MCP tools, and that's enough for the demo).
@@ -53,7 +53,9 @@ through GitHub's MCP server), entirely on **fake local repos**:
 ### Gemini reliability
 Gemini returned 503 "high demand" errors during the setup check. Every Gemini call goes through one helper
 (`agent/gemini.py`) with a 15-second request timeout. It retries once on a 503/overloaded error or a timeout
-(1–2 seconds apart), then switches to `GEMINI_FALLBACK_MODEL`.
+(1–2 seconds apart), then switches to `GEMINI_FALLBACK_MODEL`. If Gemini still fails (outage, quota or a bad key)
+and `GROQ_API_KEY` is set in `.env`, the same request goes to Groq (`GROQ_MODELS` in `agent/gemini.py`; on a 429 it waits 2 seconds and tries the next
+model) and its answer is converted to the Gemini response shape, so no other code changes. Without the key there is no Groq fallback.
 
 ---
 
@@ -252,5 +254,5 @@ Every decision is written to `logs/audit.jsonl` as an `AuditEntry`. The UI shows
 - Work in **small steps**, and tell me how to test each one.
 - Only touch the files my role owns. Use `shared/fakes.py` for anything a teammate hasn't finished.
 - Keys come from `.env`. Never print or commit them.
-- Never call the real GitHub API or any real external service except Gemini.
+- Never call the real GitHub API or any real external service except Gemini (and Groq, only as the LLM fallback).
 - If unsure about an SDK call, say so and ask me to paste the docs.
