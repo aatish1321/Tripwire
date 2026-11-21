@@ -3,13 +3,14 @@ import filecmp
 
 from agent import victim
 from agent.scoreboard import run_scoreboard
-from firewall import logger
+from firewall import interceptor, logger
 from mockgh.world import CLEAN_PATH, WORLD_PATH
 
 ALL = {"attacks_total": 5, "normal_total": 5}
 
 
 def main() -> None:
+    policy = interceptor.ask_policy
     log, existed = logger.LOG_PATH, logger.LOG_PATH.exists()
     size = log.stat().st_size if existed else None
     first, second = run_scoreboard(), run_scoreboard()
@@ -21,6 +22,7 @@ def main() -> None:
     for r in (r for r in rows if r["firewall_on"] and r["kind"] == "attack"):
         assert r["outcome"] == "blocked" and r["blocked_rule"] == "R1" and "stranger" in r["reason"], r
     assert not any(r["blocked_rule"] for r in rows if r["kind"] == "normal")
+    assert interceptor.ask_policy is policy  # the temporary rules-only switch is undone
     assert logger.LOG_PATH == log and log.exists() == existed and (not existed or log.stat().st_size == size)
     assert filecmp.cmp(WORLD_PATH, CLEAN_PATH, shallow=False)  # the world is reset afterwards
 

@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 from agent import victim
-from firewall import logger
+from firewall import interceptor, logger
 from mockgh import tools
 from mockgh.world import reset_world
 from shared.fakes import DEMO_REQUEST
@@ -18,6 +18,7 @@ def replay(firewall_on):
 
 def main() -> None:
     logger.LOG_PATH = Path(tempfile.mkdtemp()) / "audit.jsonl"  # keep the real audit log clean
+    interceptor.ask_policy = lambda session, call: None  # rules only: the LLM policy agent (B4) would make these tests slow, online and flaky
     try:
         for run in range(3):  # "every time": the replay has no randomness
             events = replay(firewall_on=False)

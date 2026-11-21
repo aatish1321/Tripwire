@@ -9,7 +9,7 @@ from pathlib import Path
 from google.genai import types
 
 from agent import victim
-from firewall import logger
+from firewall import interceptor, logger
 from mockgh import tools
 from mockgh.world import reset_world
 from shared.fakes import DEMO_REQUEST
@@ -49,6 +49,7 @@ def attack():
 
 def offline() -> None:
     logger.LOG_PATH = Path(tempfile.mkdtemp()) / "audit.jsonl"  # keep the real audit log clean
+    interceptor.ask_policy = lambda session, call: None  # rules only: the LLM policy agent (B4) would make these tests slow, online and flaky
     try:
         events, _ = run(attack(), firewall_on=False)
         types_ = [e["type"] for e in events]
