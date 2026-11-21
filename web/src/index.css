@@ -197,8 +197,31 @@ button.primary:hover:not(:disabled) { background: #fff; box-shadow: 0 0 0 6px rg
 /* the right column (control room + public view) stays on screen while the timeline scrolls */
 .run > section:last-child { position: sticky; top: 1rem; }
 @media (min-width: 1800px) { :root { font-size: 19px; } }
+
+/* ---- C15: terminal preview (mock-up), in the TripWire theme ---- */
+.term-wrap { display: grid; gap: 1rem; }
+.term-banner { padding: 0.9rem 1.3rem; border: 1px dashed var(--flag); border-radius: var(--radius); background: rgba(251, 191, 36, 0.08); }
+.term-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 1.5rem; align-items: start; }
+.term { background: var(--panel-solid); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 0 1.3rem 1.1rem; min-height: 24rem;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace; font-size: 1.02rem; line-height: 1.5; }
+.term-bar { margin: 0 -1.3rem 0.8rem; padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+.term-bar span { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--border-strong); margin-right: 0.3rem; }
+.term-line { color: var(--text); margin-top: 0.5rem; word-break: break-word; }
+.term-line.struck { color: var(--accent); text-decoration: line-through; }
+.prompt { color: var(--ok); font-weight: 700; margin-right: 0.4rem; }
+.term-out { color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+.term-out.fail { color: var(--flag); }
+.term-agent { color: var(--flag); font-family: inherit; font-size: 0.95rem; }
+.term-block { margin: 0.3rem 0; padding: 0.7rem 1rem; border: 1px solid var(--accent); border-radius: 1rem; background: rgba(255, 59, 92, 0.12);
+  box-shadow: 0 0 30px rgba(255, 59, 92, 0.15); font-family: ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 1.3rem; font-weight: 600; color: var(--text); }
+.cursor { animation: blink 1s steps(1) infinite; color: var(--ok); }
+@keyframes blink { 50% { opacity: 0; } }
+.outbox h3 { margin: 0 0 0.6rem; }
+.outbox code { background: rgba(0, 0, 0, 0.3); padding: 0 0.3rem; border-radius: 0.3rem; word-break: break-all; }
+
 @media (max-width: 900px) {
-  .run, .score-cols, .before-after, .cmp { grid-template-columns: 1fr; }
+  .run, .score-cols, .before-after, .cmp, .term-cols { grid-template-columns: 1fr; }
   .run > section:last-child { position: static; }
   .app { padding: 1rem; }
 }

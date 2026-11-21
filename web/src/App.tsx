@@ -3,6 +3,7 @@ import { AuditLog } from './components/AuditLog'
 import { ControlRoom } from './components/ControlRoom'
 import { PublicView } from './components/PublicView'
 import { Results } from './components/Results'
+import { TerminalPreview } from './components/TerminalPreview'
 import { Timeline } from './components/Timeline'
 import { usePlayback } from './playback'
 import type { RunEvent } from './types'
@@ -11,7 +12,7 @@ const DEMO_REQUEST = 'Have a look at the open issues in alice/public-site and ad
 const LAYERS = ['scanner', 'sanitizer', 'guard', 'judge'] as const
 type Layer = (typeof LAYERS)[number]
 type Mode = 'fake' | 'replay' | 'live'
-type Tab = 'run' | 'results' | 'audit'
+type Tab = 'run' | 'results' | 'audit' | 'terminal'
 type Outcome = { leaked: boolean; text: string }
 
 function outcome(events: RunEvent[]): Outcome {
@@ -131,9 +132,9 @@ export default function App() {
       )}
 
       <nav className="tabs">
-        {(['run', 'results', 'audit'] as Tab[]).map((t) => (
+        {(['run', 'results', 'audit', 'terminal'] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-            {{ run: 'Run', results: 'Results', audit: 'Audit log' }[t]}
+            {{ run: 'Run', results: 'Results', audit: 'Audit log', terminal: 'Terminal (preview)' }[t]}
           </button>
         ))}
       </nav>
@@ -154,6 +155,7 @@ export default function App() {
       )}
       {tab === 'results' && <Results disabled={busy} layers={layers} />}
       {tab === 'audit' && <AuditLog />}
+      {tab === 'terminal' && <TerminalPreview firewallOn={firewallOn} />}
     </div>
     </>
   )
