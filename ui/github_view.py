@@ -12,13 +12,13 @@ def highlight(text: str, secrets: list[str]) -> str:
     return out
 
 
-def render_public_view(view: dict, leak: dict | None) -> None:
-    if leak:
+def render_public_view(view: dict, secrets: list[str]) -> None:
+    """secrets: the leaked private strings from this run's leak events (empty = no leak)."""
+    if secrets:
         st.error("PRIVATE DATA IS NOW PUBLIC", icon="🚨")
     prs = view["pull_requests"]
     if not prs:
         st.caption(f"No pull requests on {view['repo']}.")
-    secrets = leak["private_text"] if leak else []
     for pr in prs:
         with st.container(border=True):
             st.markdown(f"**PR #{pr['number']}: {pr['title']}**")

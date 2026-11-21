@@ -87,14 +87,17 @@ def render_timeline(events: list[dict]) -> None:
         if kind == "call":
             _call_card(d)
         elif kind == "user":
-            st.markdown(f'<div class="tl-user">👤 <b>User:</b> {html.escape(d["text"])}</div>',
+            label = " <i>(scripted replay)</i>" if d.get("scripted") else ""
+            st.markdown(f'<div class="tl-user">👤 <b>User:</b> {html.escape(d["text"])}{label}</div>',
                         unsafe_allow_html=True)
         elif kind == "agent_text":
             st.markdown(f"🤖 {d.get('text', '')}")
         elif kind == "leak":
-            st.markdown(f'<div class="tl-leak">🚨 Private data leaked into public repo '
-                        f'{html.escape(d["repo"])}</div>', unsafe_allow_html=True)
+            what = ("Agent read private repo {} after a stranger's instructions" if d.get("kind") == "private_read"
+                    else "Private data leaked into public repo {}")
+            st.markdown(f'<div class="tl-leak">🚨 {what.format(html.escape(d["repo"]))}</div>',
+                        unsafe_allow_html=True)
         elif kind == "final":
             st.info(f"🤖 {d['text']}")
         elif kind == "error":
-            st.warning(f"Error: {d}")
+            st.warning(f"Error: {d.get('message', d)}")
