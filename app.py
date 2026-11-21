@@ -23,8 +23,16 @@ st.set_page_config(page_title="Agent Firewall", page_icon="🛡️", layout="wid
 
 if "events" not in st.session_state:
     st.session_state.events = []
+    st.session_state.outcomes = {}  # firewall_on -> (leaked, text) of its last run, kept across resets
 
-st.title("🛡️ Agent Firewall")
+# projector polish: hide Streamlit's menu, toolbar and footer, and use less empty space at the top
+st.markdown("""<style>
+#MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] {display: none;}
+header[data-testid="stHeader"] {background: transparent;}
+.block-container {padding-top: 1.5rem;}
+</style>""", unsafe_allow_html=True)
+
+st.title("🛡️ Agent Firewall: a security guard for AI agents")
 
 # ---- Top: controls ----
 request = st.text_input("User request", value=DEMO_REQUEST)
@@ -39,6 +47,20 @@ if reset_clicked:
     st.session_state.events = []
     st.toast("World reset")
 
+
+
+
+def outcome(events: list[dict]) -> tuple[bool, str]:
+    block = next((e["data"] for e in events if e["type"] == "decision" and e["data"]["verdict"] == "block"), None)
+    if block:
+        return False, f"✅ Attack blocked ({block['rule']}), nothing leaked"
+    if any(e["type"] == "leak" for e in events):
+        return True, "🚨 Private data leaked to the public"
+    return False, "Nothing leaked, nothing blocked"
+
+
+# Filled after a run below, but drawn here so it sits above the tabs
+summary = st.container()
 
 # ---- Main: two columns + audit tab ----
 tab_run, tab_results, tab_audit = st.tabs(["Run", "Results", "Audit log"])
@@ -64,6 +86,7 @@ with tab_run:
                 with timeline.container():
                     render_timeline(st.session_state.events)
                 time.sleep(STEP_DELAY)
+            st.session_state.outcomes[firewall_on] = outcome(st.session_state.events)
         else:
             with timeline.container():
                 render_timeline(st.session_state.events)
@@ -77,3 +100,11 @@ with tab_run:
 with tab_audit:
     st.subheader("Audit log")
     render_audit(read_log())
+
+with summary:
+    o = st.session_state.outcomes
+    if False in o and True in o:  # only after one run with the firewall off and one with it on
+        before, after = st.columns(2)
+        for col, on, title in ((before, False, "Before: firewall OFF"), (after, True, "After: firewall ON")):
+            leaked, text = o[on]
+            (col.error if leaked else col.success)(f"**{title}:** {text}")
