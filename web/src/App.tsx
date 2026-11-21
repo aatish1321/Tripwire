@@ -77,7 +77,8 @@ export default function App() {
     es.onmessage = (msg) => {
       const ev: RunEvent = JSON.parse(msg.data)
       setEvents((prev) => [...prev, ev])
-      if (ev.type === 'final' || ev.type === 'error') stop()
+      // a tool error has a call_id and the agent carries on (e.g. a file that doesn't exist); only a run-level error ends it
+      if (ev.type === 'final' || (ev.type === 'error' && !ev.data?.call_id)) stop()
     }
     // EventSource would reconnect and replay the run; a dropped stream or a 409 (run in progress) ends it instead
     es.onerror = () => {

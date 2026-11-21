@@ -29,6 +29,18 @@ The Guard's rules:
 
 The rules decide. The LLM (Gemini, with Groq as fallback) only writes the reason and can add a block, never remove one.
 
+## AI tech stack
+
+| Part | Model and tool | Used for |
+|---|---|---|
+| The AI agent (Live mode) | **Google Gemini** `gemini-3.5-flash-lite`, fallback `gemini-3.8-flash`, via the `google-genai` SDK with function calling | Decides each step: which tool to call (read an issue, read a file, open a pull request) |
+| Agent fallback | **Groq** `openai/gpt-oss-120b`, then `gpt-oss-20b`, then `qwen/qwen3.8-27b` | Takes over if Gemini is unavailable |
+| Policy agent (Guard and Judge) | Gemini, with Groq `openai/gpt-oss-120b`, JSON output | Checks whether an action came from the user or from untrusted text, and writes the one-sentence reason |
+| Scanner's second check | Same Gemini / Groq setup | Quotes sentences in a stranger's text that try to instruct the AI; only exact quotes are accepted |
+
+Each firewall LLM call is limited to 6 seconds; if no model answers, the rules decide on their own. No agent framework
+(no LangChain or LlamaIndex): the agent loop and the five firewall agents are plain Python.
+
 ## Results
 
 | | TripWire off | TripWire on |
