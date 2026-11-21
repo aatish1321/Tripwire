@@ -12,11 +12,20 @@ const LAYERS = ['scanner', 'sanitizer', 'guard', 'judge'] as const
 type Layer = (typeof LAYERS)[number]
 type Mode = 'fake' | 'replay' | 'live'
 type Tab = 'run' | 'results' | 'audit'
+type Outcome = { leaked: boolean; text: string }
+
+function outcome(events: RunEvent[]): Outcome {
+  const block = events.find((e) => e.type === 'decision' && e.data.verdict === 'block')
+  if (block) return { leaked: false, text: `✅ Attack blocked${block.data.rule ? ` (${block.data.rule})` : ''}, nothing leaked` }
+  if (events.some((e) => e.type === 'leak')) return { leaked: true, text: '🚨 Private data leaked to the public' }
+  return { leaked: false, text: 'Nothing leaked, nothing blocked' }
+}
 
 export default function App() {
   const [request, setRequest] = useState(DEMO_REQUEST)
   const [firewallOn, setFirewallOn] = useState(true)
-  const [mode, setMode] = useState<Mode>('fake')
+  const [mode, setMode] = useState<Mode>('replay') // A8 is in: replay shows the real agent steps
+  const [outcomes, setOutcomes] = useState<{ off?: Outcome; on?: Outcome }>({}) // last run per firewall setting, kept across resets
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ scanner: true, sanitizer: true, guard: true, judge: true })
   const [events, setEvents] = useState<RunEvent[]>([])
   const [running, setRunning] = useState(false)
@@ -26,8 +35,10 @@ export default function App() {
   const busy = running || !done // still streaming, or still playing back what arrived
   const [refresh, setRefresh] = useState(0) // bump to re-read the public view
   useEffect(() => {
-    if (!busy) setRefresh((n) => n + 1)
-  }, [busy])
+    if (busy) return
+    setRefresh((n) => n + 1)
+    if (events.length) setOutcomes((o) => ({ ...o, [events[0].firewall_on ? 'on' : 'off']: outcome(events) }))
+  }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps -- only when a run finishes
   // only PR leaks carry private_text; "private_read" leaks don't put anything in public
   const leaked: string[] = visible.filter((e) => e.type === 'leak').flatMap((e) => e.data.private_text ?? [])
 
@@ -99,6 +110,13 @@ export default function App() {
         </div>
       </section>
 
+      {outcomes.off && outcomes.on && (
+        <div className="before-after">
+          <div className={outcomes.off.leaked ? 'ba bad' : 'ba good'}><b>Before: firewall OFF</b> {outcomes.off.text}</div>
+          <div className={outcomes.on.leaked ? 'ba bad' : 'ba good'}><b>After: firewall ON</b> {outcomes.on.text}</div>
+        </div>
+      )}
+
       <nav className="tabs">
         {(['run', 'results', 'audit'] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
@@ -111,7 +129,7 @@ export default function App() {
         <div className="run">
           <section>
             <h2>Agent activity</h2>
-            <Timeline events={visible} />
+            <Timeline events={visible} follow={busy} />
           </section>
           <section>
             <h2>Agent control room</h2>

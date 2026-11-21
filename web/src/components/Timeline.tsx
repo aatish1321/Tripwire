@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { AgentStep, Decision, Evidence, RunEvent, ToolCall, ToolResult } from '../types'
 import { short } from '../text'
 import { AGENTS, cap, ICON, worst } from './agents'
@@ -66,7 +67,13 @@ function CallCard({ card }: { card: Card }) {
   )
 }
 
-export function Timeline({ events }: { events: RunEvent[] }) {
+export function Timeline({ events, follow }: { events: RunEvent[]; follow: boolean }) {
+  const end = useRef<HTMLDivElement>(null)
+  // on a projector the blocked card is below the fold: keep the newest step in view while the run plays
+  useEffect(() => {
+    if (follow) end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [events.length, follow])
+
   if (events.length === 0) return <p className="muted">Press Run to start the agent.</p>
   return (
     <div className="timeline">
@@ -92,6 +99,7 @@ export function Timeline({ events }: { events: RunEvent[] }) {
             return null
         }
       })}
+      <div ref={end} />
     </div>
   )
 }

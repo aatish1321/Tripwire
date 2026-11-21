@@ -97,3 +97,13 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .table th { color: var(--muted); font-weight: 600; }
 .row-block td { background: rgba(255, 75, 75, 0.18); }
 .warn { color: #ffb020; font-weight: 700; }
+
+/* C13: before / after strip and projector sizing */
+.before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+.ba { padding: 0.8rem 1.1rem; border-radius: 0.7rem; font-size: 1.2rem; border: 2px solid; }
+.ba b { margin-right: 0.5rem; }
+.ba.bad { border-color: #ff4b4b; background: rgba(255, 75, 75, 0.14); }
+.ba.good { border-color: #21c354; background: rgba(33, 195, 84, 0.14); }
+/* the right column (control room + public view) stays on screen while the timeline scrolls */
+.run > section:last-child { position: sticky; top: 1rem; }
+@media (min-width: 1800px) { :root { font-size: 19px; } }
