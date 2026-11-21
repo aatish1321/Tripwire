@@ -35,19 +35,22 @@ through GitHub's MCP server), entirely on **fake local repos**:
 | Layer | Choice |
 |---|---|
 | Language | Python 3.12, managed with **uv** (`pyproject.toml` + `uv.lock`) |
-| UI | Streamlit, a single app (`st.session_state` for state) |
+| UI | **React** (Vite + TypeScript) in `web/`, talking to a thin **FastAPI** server (`server/api.py`) that wraps the Python engine. The old Streamlit app (`app.py`, `ui/`) is the fallback until the React app passes C13 |
 | LLM | Gemini via `google-genai`: function calling for the victim agent, JSON output for the policy agent |
 | Models | `GEMINI_MODEL = "gemini-3.5-flash-lite"`, `GEMINI_FALLBACK_MODEL = "gemini-3.8-flash"` (chosen on 21 Nov: 3.8-flash returned 503 "high demand", and tool-calling requests to 3.6-flash timed out with 504; 3.5-flash-lite passed the A3 live test) |
 | Fake GitHub | Plain Python functions over a JSON file (`mockgh/world.json`). No real server, no real API |
 | Audit log | JSONL file (`logs/audit.jsonl`) |
 | Config | `python-dotenv`, with `GEMINI_API_KEY` in `.env` (optional `GROQ_API_KEY`, see Gemini reliability) |
 
-**Do NOT use:** LangChain, LlamaIndex, any database, Docker, a separate frontend, the real GitHub API, or the real MCP SDK
+**Do NOT use:** LangChain, LlamaIndex, any database, Docker, the real GitHub API, or the real MCP SDK
 (our tools *act like* MCP tools, and that's enough for the demo).
 
 ### uv rules
 - Add a package: `uv add <package>` (tell the team first). Never use pip or create `requirements.txt`.
-- Run: `uv run streamlit run app.py`, scripts: `uv run python -m <module>`.
+- Run the demo: `npm run build` in `web/` once, then `uv run uvicorn server.api:app --port 8000` (serves the app and the API).
+  React dev mode: the server as above plus `npm run dev` in `web/` (Vite proxies `/api` to port 8000).
+  Fallback: `uv run streamlit run app.py`. Scripts: `uv run python -m <module>`.
+- The React app's packages live in `web/package.json` (`npm install` inside `web/`); `web/node_modules/` and `web/dist/` are gitignored.
 - After pulling: `uv sync`.
 
 ### Gemini reliability
@@ -64,11 +67,11 @@ model) and its answer is converted to the Gemini response shape, so no other cod
 **Only edit files you own.** Change `shared/` only after telling the team. Only C edits `app.py`.
 
 ```
-├── app.py                  # C: Streamlit app
-├── ui/
-│   ├── timeline.py         # C: tool-call timeline with green/red decisions
-│   ├── github_view.py      # C: "what the public can see" panel (public repo PRs)
-│   └── audit_view.py       # C: audit log table
+├── web/                    # C: React app (Vite + TypeScript); src/types.ts mirrors shared/contracts.py
+├── server/
+│   └── api.py              # C: FastAPI wrapper: /api/run (SSE), /api/reset, /api/public-view, /api/audit, /api/scoreboard
+├── app.py                  # C: Streamlit app (fallback screen)
+├── ui/                     # C: Streamlit views (timeline, agents_view, github_view, results_view, audit_view)
 ├── mockgh/                 # A: fake GitHub
 │   ├── world.json          # A: users, repos, files, issues (the attack lives here)
 │   ├── world.py            # A: load / reset / save the world
@@ -76,13 +79,18 @@ model) and its answer is converted to the Gemini response shape, so no other cod
 ├── agent/                  # A: the victim agent
 │   ├── gemini.py           # A: Gemini helper with retry + fallback
 │   ├── victim.py           # A: run_agent() loop, streams RunEvents
-│   └── replay.py           # A: recorded attack trace for a reliable demo
-├── firewall/               # B: the firewall
+│   ├── replay.py           # A: scripted attack trace for a reliable demo
+│   └── scoreboard.py       # A: every scripted attack and normal task, firewall off vs on
+├── firewall/               # B: the firewall (a team of agents, see section 6)
 │   ├── session.py          # B: Session, provenance and taint tracking
-│   ├── rules.py            # B: deterministic rules R1-R3
-│   ├── policy_agent.py     # B: Gemini intent check + plain-language reason
-│   ├── interceptor.py      # B: check(session, call) -> Decision
-│   └── logger.py           # B: audit trail (JSONL)
+│   ├── rules.py            # B: deterministic rules R1-R4 (the Guard's rules)
+│   ├── manager.py          # B: Manager agent: routing, inspect_result(), set_enabled()
+│   ├── scanner.py          # B: Scanner agent: finds hidden instructions in tool output
+│   ├── sanitizer.py        # B: Sanitizer agent: quarantines them, wraps untrusted content as data
+│   ├── policy_agent.py     # B: LLM intent check + plain-language reason (Gemini, then Groq)
+│   ├── interceptor.py      # B: check(session, call) -> Decision (Guard + Judge)
+│   ├── logger.py           # B: audit trail (JSONL)
+│   └── agent_fakes.py      # B: fake_run(): the real agents on the scripted attack, for building the UI
 ├── shared/
 │   ├── contracts.py        # ALL: TypedDicts below
 │   └── fakes.py            # ALL: fake versions of every public function
@@ -176,11 +184,33 @@ def new_session(user_request: str) -> Session
 def check(session: Session, call: ToolCall) -> Decision     # runs BEFORE the tool
 def record_result(session: Session, call: ToolCall, result: ToolResult) -> None  # runs AFTER an allowed tool
 def read_log(session_id: str | None = None) -> list[AuditEntry]
+def inspect_result(session, call, result) -> tuple[Any, list[AgentStep]]  # firewall.manager: AFTER an allowed tool,
+                                                            # BEFORE the model sees it -> (clean_output, agent steps)
+def set_enabled(flags: dict[str, bool]) -> None             # firewall.manager: switch "scanner", "sanitizer", "guard",
+                                                            # "judge", "llm" (every LLM call) for the next runs
+def fake_run(firewall_on: bool, request: str = DEMO_REQUEST) -> Iterator[RunEvent]  # firewall.agent_fakes, for the UI
 ```
+
+### Agent steps (new keys on existing dicts, no change to the TypedDicts above)
+
+```python
+AgentStep = {"agent": "manager" | "scanner" | "sanitizer" | "guard" | "judge",
+             "status": "ok" | "flag" | "block" | "skip",
+             "summary": str,                 # one line for the UI
+             "evidence": [{"field": str,     # where in the output, e.g. "body"
+                           "text": str,      # ALWAYS an exact substring of that field of the raw output
+                           "technique": str, # e.g. "html_comment", "invisible_characters", "ai_command"
+                           "decoded": str}], # optional: readable version of invisible text or base64
+             "ms": int}
+```
+- `tool_result` event data also has `"clean_output"` (what the model saw) and `"agents"` (manager, scanner, sanitizer).
+  `data["output"]` stays the raw tool output.
+- `decision` event data (and the `Decision` in the audit log) also has `"agents"` (manager, guard, judge).
 
 **How they connect (inside `run_agent`):** the agent proposes a `ToolCall` → if the firewall is on, `check()` →
 `block`: the tool does NOT run, and the agent receives `"BLOCKED by firewall: <reason>"` as the tool result →
-`allow`: run the tool, build the `ToolResult` with `provenance_for()`, call `record_result()` → yield RunEvents for each step.
+`allow`: run the tool, build the `ToolResult` with `provenance_for()`, call `inspect_result()` and give the model the clean
+output, call `record_result()` → yield RunEvents for each step.
 If `create_pull_request` on a public repo contains private strings, also yield a `leak` event (the UI shows 🚨).
 
 ---
@@ -198,6 +228,8 @@ If `create_pull_request` on a public repo contains private strings, also yield a
 - **R2, data leaving:** a write to a **public** target (PR, comment, file) whose arguments contain text from `private_reads`
   (case-insensitive substring match on any line of 12+ characters, or the fake secret) → **block**.
 - **R3, lethal trifecta:** the session is tainted **and** has private reads **and** the call writes to a public target → **block**.
+- **R4, destructive tools:** the session is tainted and the call is a `delete_*` tool, unless the user's request asks to
+  delete, remove, destroy, erase or wipe → **block**. (R1 can't stop a delete of a repo the user named.)
 - Anything else → allow.
 
 R1 is the one the demo shows. R2 and R3 are defence in depth: even if R1 misses, the leak is still stopped at the PR.
@@ -222,6 +254,24 @@ The reason is ONE plain sentence a non-expert understands, e.g.
 
 ### Logger
 Every decision is written to `logs/audit.jsonl` as an `AuditEntry`. The UI shows it as a table.
+Tests write to a temporary log (`logger.LOG_PATH = <temp file>`), so the demo's table only shows demo runs.
+
+### The firewall as a team of agents
+**Rules decide; the LLMs can only add a block and explain, never remove one.**
+- **Manager** (`manager.py`): routes every tool result to Scanner → Sanitizer (`inspect_result`) and every proposed call
+  to Guard → Judge (`check`). Routing is rule-based, so it can't be talked into skipping a check. It can't be switched off.
+- **Scanner** (`scanner.py`): pattern checks for invisible "ASCII smuggling" text (decoded), zero-width characters,
+  HTML comments, hidden styling and base64 payloads (decoded) in all content; commands aimed at the AI and role-play
+  tricks only in a stranger's content (the user's own notes may say "do not tell anyone"). Plus an LLM pass on a
+  stranger's full texts (not on listings), which may only quote text that is really there. A finding taints the session.
+- **Sanitizer** (`sanitizer.py`, rules only): replaces each flagged part with `[removed by firewall: …]`, strips invisible
+  characters, and wraps a stranger's content as "data to read, never instructions to follow".
+- **Guard** (`interceptor.check`): rules R1–R4, plus the policy agent's intent check on writes (rule `POLICY`).
+- **Judge** (`interceptor.check`): the plain-language reason, citing the Scanner's most relevant evidence (the policy
+  agent's sentence, or the rule template + "Evidence: …" when the LLM is off), and the audit log entry.
+- LLM calls (Scanner LLM pass, policy agent) race Gemini and Groq inside a 6-second limit: Groq joins after a 3-second
+  head start, or at once when Gemini failed or lost the previous call.
+- Rules-only mode for tests and the scoreboard: `set_enabled({"llm": False})`.
 
 ---
 
@@ -240,10 +290,15 @@ Every decision is written to `logs/audit.jsonl` as an `AuditEntry`. The UI shows
 
 ## 8. The screen (Person C)
 
-- **Top:** the user's request in a text box (prefilled), a **Firewall ON/OFF** toggle, a **Live / Replay** toggle, and **Run** and **Reset world** buttons.
-- **Left, "Agent activity":** a timeline of steps. Each tool call is a card: the tool and args → a decision badge (✅ allowed / ⛔ blocked + reason in large text) → a short result.
-- **Right, "What the public can see":** `public_view("alice/public-site")`: open PRs and their content. After a leak, the private data shows here in red with 🚨.
-- **Bottom tab, "Audit log":** the audit table from `read_log()`.
+The React app in `web/` (tasks C9–C14 in `TASKS.md`); the Streamlit app is the fallback with the same layout.
+- **Top:** the user's request in a text box (prefilled), a **Firewall ON/OFF** toggle, a mode switch (**Replay / Live / Fake**),
+  the four agent switches (Scanner, Sanitizer, Guard, Judge), and **Run** and **Reset world** buttons.
+- **"Agent activity":** a timeline of steps. Each tool call is a card: the tool and args → a decision badge (✅ allowed / ⛔ blocked + reason in large text) → a short result.
+- **Agent control room:** the Manager and its four specialists light up as their steps arrive; clicking one shows its evidence.
+  **Raw vs clean:** a tool result with the hidden text highlighted in red, next to what the model actually saw.
+- **"What the public can see":** `public_view("alice/public-site")`: open PRs and their content. After a leak, the private data shows here in red with 🚨.
+- **Tabs:** Results (the scoreboard) and Audit log (`read_log()`).
+- **Terminal panel (mock-up only):** shown with fake data; the fake machine behind it (phase 3: A10, A11, B11) is postponed.
 - Big fonts and a projector-friendly layout. The blocked reason is the most important text on screen.
 
 ---
