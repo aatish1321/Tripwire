@@ -1,4 +1,7 @@
 import { useRef, useState } from 'react'
+import { ControlRoom } from './components/ControlRoom'
+import { Timeline } from './components/Timeline'
+import { usePlayback } from './playback'
 import type { RunEvent } from './types'
 
 const DEMO_REQUEST = 'Have a look at the open issues in alice/public-site and address them.'
@@ -16,6 +19,8 @@ export default function App() {
   const [running, setRunning] = useState(false)
   const [tab, setTab] = useState<Tab>('run')
   const source = useRef<EventSource | null>(null)
+  const { visible, active, done } = usePlayback(events)
+  const busy = running || !done // still streaming, or still playing back what arrived
 
   function stop() {
     source.current?.close()
@@ -71,8 +76,8 @@ export default function App() {
               </label>
             ))}
           </div>
-          <button className="primary" onClick={run} disabled={running}>{running ? 'Running…' : '▶ Run'}</button>
-          <button onClick={reset} disabled={running}>↺ Reset world</button>
+          <button className="primary" onClick={run} disabled={busy}>{busy ? 'Running…' : '▶ Run'}</button>
+          <button onClick={reset} disabled={busy}>↺ Reset world</button>
         </div>
         <div className="row layers">
           {LAYERS.map((l) => (
@@ -93,15 +98,16 @@ export default function App() {
       </nav>
 
       {tab === 'run' && (
-        // C10: raw events in order; C11 turns these into the timeline and the control room
-        <ol className="events">
-          {events.length === 0 && <li className="muted">Press Run to start the agent.</li>}
-          {events.map((ev, i) => (
-            <li key={i}>
-              <b>{ev.type}</b> <code>{JSON.stringify(ev.data).slice(0, 220)}</code>
-            </li>
-          ))}
-        </ol>
+        <div className="run">
+          <section>
+            <h2>Agent activity</h2>
+            <Timeline events={visible} />
+          </section>
+          <section>
+            <h2>Agent control room</h2>
+            <ControlRoom events={visible} active={active} />
+          </section>
+        </div>
       )}
       {tab === 'results' && <p className="muted">Results: coming in C12.</p>}
       {tab === 'audit' && <p className="muted">Audit log: coming in C12.</p>}
