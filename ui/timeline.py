@@ -3,6 +3,9 @@ import html
 
 import streamlit as st
 
+from ui.agents_view import COLOR, ICON, ORDER, RANK
+from ui.github_view import highlight
+
 CSS = """
 <style>
 .tl-tool { font-size: 1.35rem; font-weight: 700; }
@@ -18,6 +21,13 @@ CSS = """
 .tl-result { font-family: monospace; font-size: 0.95rem; opacity: 0.7; white-space: pre-wrap;
              word-break: break-word; }
 .tl-user { font-size: 1.25rem; }
+.tl-chain { margin: 0.3rem 0; font-size: 1.05rem; }
+.tl-chip { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 700; margin: 0.1rem 0; }
+.tl-quote { font-size: 1.25rem; font-style: italic; margin-top: 0.5rem; border-left: 4px solid #ff4b4b; padding-left: 0.7rem; }
+.tl-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-top: 0.4rem; }
+.tl-cmp div { font-family: monospace; font-size: 0.95rem; white-space: pre-wrap; word-break: break-word;
+              border: 1px solid #8884; border-radius: 0.4rem; padding: 0.5rem; }
+details summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; }
 .tl-leak { background: #ff2b2b; color: white; border-radius: 0.6rem; padding: 0.8rem 1rem;
            font-size: 1.4rem; font-weight: 800; margin: 0.4rem 0; }
 </style>
@@ -31,6 +41,28 @@ def _short(value, limit: int) -> str:
 
 def _args(args: dict) -> str:
     return ", ".join(f"{k}={_short(repr(v), 60)}" for k, v in args.items())
+
+
+def _text(output) -> str:
+    """Readable text for a tool output, without JSON escaping, so evidence strings still match."""
+    if isinstance(output, dict):
+        return "\n".join(f"{k}: {v}" for k, v in output.items())
+    if isinstance(output, list):
+        return "\n".join(", ".join(f"{k}: {v}" for k, v in x.items()) if isinstance(x, dict) else str(x) for x in output)
+    return str(output)
+
+
+def _chain(steps: list[dict]) -> str:
+    """Manager → Scanner → Sanitizer → Guard → Judge, each with its worst status for this call."""
+    status = {}
+    for s in steps:
+        status[s["agent"]] = max(status.get(s["agent"]), s["status"], key=RANK.get)
+    chips = []
+    for a in ORDER:
+        st_, c = status.get(a), COLOR[status.get(a)]
+        chips.append(f'<span class="tl-chip" style="border:2px solid {c};background:{c}22">'
+                     f'{ICON[a]} {a.capitalize()} {(st_ or "–").upper()}</span>')
+    return '<div class="tl-chain">' + " → ".join(chips) + "</div>"
 
 
 def _group(events: list[dict]) -> list[tuple[str, dict]]:
@@ -60,11 +92,17 @@ def _call_card(card: dict) -> None:
             f'<div class="tl-args">{html.escape(_args(call["args"]))}</div>',
             unsafe_allow_html=True,
         )
+        steps = (decision or {}).get("agents", []) + (result or {}).get("agents", [])
+        if steps:
+            st.markdown(_chain(steps), unsafe_allow_html=True)
         if decision and decision["verdict"] == "block":
             rule = f' · {html.escape(decision["rule"])}' if decision.get("rule") else ""
+            quotes = list(dict.fromkeys(e["text"] for s in decision.get("agents", []) if s["status"] == "block"
+                                        for e in s["evidence"]))
+            quote = "".join(f'<div class="tl-quote">Evidence: “{html.escape(q)}”</div>' for q in quotes)
             st.markdown(
                 f'<div class="tl-block-box"><div class="tl-block-title">⛔ BLOCKED{rule}</div>'
-                f'<div class="tl-reason">{html.escape(decision["reason"])}</div></div>',
+                f'<div class="tl-reason">{html.escape(decision["reason"])}</div>{quote}</div>',
                 unsafe_allow_html=True,
             )
         elif decision:
@@ -75,6 +113,14 @@ def _call_card(card: dict) -> None:
         if result:
             st.markdown(f'<div class="tl-result">→ {html.escape(_short(result["output"], 160))}</div>',
                         unsafe_allow_html=True)
+            found = [e["text"] for s in result.get("agents", []) for e in s["evidence"]]
+            if found or result.get("clean_output", result["output"]) != result["output"]:  # only when there's a difference
+                title = f"⚠️ {len(set(found))} hidden instruction(s) found · raw vs what the AI saw"
+                st.markdown(
+                    f'<details><summary>{title}</summary><div class="tl-cmp">'
+                    f'<div><b>Raw</b><br>{highlight(_text(result["output"]), found).replace(chr(10), "<br>")}</div>'
+                    f'<div><b>What the AI saw</b><br>{html.escape(_text(result["clean_output"])).replace(chr(10), "<br>")}'
+                    f'</div></div></details>', unsafe_allow_html=True)
 
 
 def render_timeline(events: list[dict]) -> None:
