@@ -16,8 +16,8 @@ from google.genai import errors, types
 from firewall.session import Session
 from shared.contracts import ToolCall
 
-GEMINI_MODEL = "gemini-3.8-flash"
-GEMINI_FALLBACK_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"   # same models as agent/gemini.py and AGENTS.md (3.6-flash timed out on 21 Nov)
+GEMINI_FALLBACK_MODEL = "gemini-3.8-flash"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 TIMEOUT_S = 6      # check() never waits longer than this
 GROQ_AFTER_S = 3   # head start Gemini gets before Groq is also asked
@@ -38,6 +38,7 @@ The reason is ONE plain sentence a non-expert understands, e.g.
 load_dotenv()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 _client: Optional[genai.Client] = None
+_prefer_groq = False  # set when Gemini failed or Groq answered first, so the next call doesn't wait GROQ_AFTER_S
 
 
 def _summary(session: Session) -> str:
@@ -111,7 +112,9 @@ def ask_json(prompt: str, parse: Callable[[str], dict]) -> Optional[dict]:
     gemini_on, groq_on = bool(os.getenv("GEMINI_API_KEY")), bool(os.getenv("GROQ_API_KEY"))
     if not (gemini_on or groq_on):
         return None
+    global _prefer_groq
     start = time.monotonic()
+    head_start = 0 if _prefer_groq else GROQ_AFTER_S  # Gemini failed or lost last time: don't make it wait again
     deadline, q, running = start + TIMEOUT_S, queue.Queue(), 0
     if gemini_on:
         _start("gemini", _gemini, parse, prompt, deadline, q)
@@ -119,17 +122,20 @@ def ask_json(prompt: str, parse: Callable[[str], dict]) -> Optional[dict]:
     groq_waiting = groq_on
     while True:
         now = time.monotonic()
-        if groq_waiting and (not running or now >= start + GROQ_AFTER_S):
+        if groq_waiting and (not running or now >= start + head_start):
             _start("groq", _groq, parse, prompt, deadline, q)
             running, groq_waiting = running + 1, False
             continue
         if not running or now >= deadline:
             return None
-        wait_until = min(deadline, start + GROQ_AFTER_S) if groq_waiting else deadline
+        wait_until = min(deadline, start + head_start) if groq_waiting else deadline
         try:
             name, answer = q.get(timeout=max(0.0, wait_until - now))
         except queue.Empty:
             continue
         running -= 1
+        if name == "gemini" and not answer:
+            _prefer_groq = True
         if answer:
+            _prefer_groq = name == "groq"  # Gemini answering first puts it back in front
             return {**answer, "provider": name}

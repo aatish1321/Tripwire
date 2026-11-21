@@ -10,6 +10,7 @@ from firewall.scanner import scan
 from firewall.session import Session
 from shared.contracts import Provenance, ToolCall, ToolResult
 
+LISTING_TOOLS = {"list_issues", "list_repos"}
 ENABLED = {"scanner": True, "sanitizer": True, "guard": True, "judge": True, "llm": True}  # "llm": all LLM calls
 
 
@@ -47,7 +48,8 @@ def inspect_result(session: Session, call: ToolCall, result: ToolResult) -> tupl
     findings: list[dict] = []
     t = time.monotonic()
     if ENABLED["scanner"]:
-        findings = scan(result["output"], p, use_llm=ENABLED["llm"])
+        # listings are short titles: the patterns are enough, and the LLM pass both slowed them and gave false alarms
+        findings = scan(result["output"], p, use_llm=ENABLED["llm"] and call["tool"] not in LISTING_TOOLS)
         if findings:
             techniques = ", ".join(sorted({f["technique"].replace("_", " ") for f in findings}))
             steps.append(step("scanner", "flag", f"Found {len(findings)} hidden instruction(s) in {where(p)}: {techniques}",

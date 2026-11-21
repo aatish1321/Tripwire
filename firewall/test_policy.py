@@ -56,9 +56,17 @@ fast = lambda p, d: '{"matches_request": false, "instruction_source": "untrusted
 real_gemini, real_groq = policy_agent._gemini, policy_agent._groq
 os.environ.update(GEMINI_API_KEY="x", GROQ_API_KEY="x")
 policy_agent._gemini, policy_agent._groq = slow, fast
+policy_agent._prefer_groq = False
 t = time.time()
 r = policy_agent.ask_policy(tainted(), read_secret)
 assert r and r["provider"] == "groq" and r["reason"] == "Groq says no." and 2.5 < time.time() - t < 4, (r, time.time() - t)
+t = time.time()  # B9: Groq won last time, so it is asked straight away now
+r = policy_agent.ask_policy(tainted(), read_secret)
+assert r and r["provider"] == "groq" and time.time() - t < 0.5, (r, time.time() - t)
+policy_agent._gemini = lambda p, d: fast(p, d).replace("Groq says no.", "Gemini says no.")
+r = policy_agent.ask_policy(tainted(), read_secret)  # both start at once; whichever answers first wins
+assert r and not (r["provider"] == "gemini" and policy_agent._prefer_groq)
+policy_agent._gemini, policy_agent._prefer_groq = slow, False
 policy_agent._groq = slow
 t = time.time()
 assert policy_agent.ask_policy(tainted(), read_secret) is None and 5.5 < time.time() - t < 7
