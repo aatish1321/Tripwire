@@ -2,6 +2,8 @@
 
 **A security guard for AI agents: every action is checked before it runs.**
 
+![TripWire demo: the same attack with TripWire off (private data leaks) and on (blocked, with the reason on screen)](demo/tripwire-demo.gif)
+
 ## The problem
 
 AI agents read GitHub issues, files and messages, then act on them. They can't tell the user's instructions apart from
