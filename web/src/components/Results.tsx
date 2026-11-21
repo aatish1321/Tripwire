@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import type { ScoreRow, Scoreboard } from '../types'
+import { Icon, type IconName } from './Icon'
 
-const OUTCOME: Record<ScoreRow['outcome'], string> = {
-  succeeded: '🚨 succeeded',
-  blocked: '⛔ blocked',
-  failed: '✗ failed',
-  passed: '✅ passed',
+const OUTCOME: Record<ScoreRow['outcome'], { icon: IconName; word: string }> = {
+  succeeded: { icon: 'alert', word: 'succeeded' },
+  blocked: { icon: 'block', word: 'blocked' },
+  failed: { icon: 'x', word: 'failed' },
+  passed: { icon: 'check', word: 'passed' },
 }
+const Outcome = ({ kind }: { kind: ScoreRow['outcome'] }) => (
+  <span className={`out ${kind}`}><Icon name={OUTCOME[kind].icon} /> {OUTCOME[kind].word}</span>
+)
 
 const AGENT_KEYS = ['scanner', 'sanitizer', 'guard', 'judge']
 // which agents were off for the "on" runs, as the server reports it
@@ -36,7 +40,7 @@ export function Results({ disabled }: { disabled: boolean }) {
     <div className="results">
       {/* the scoreboard rewrites the shared world file, so never while a demo run is going */}
       <div className="row">
-        <button className="primary" onClick={load} disabled={disabled}>▶ Run scoreboard</button>
+        <button className="primary" onClick={load} disabled={disabled}><Icon name="play" /> Run scoreboard</button>
         {AGENT_KEYS.map((l) => (
           <label key={l} className="switch">
             <input type="checkbox" checked={layers[l]} onChange={(e) => setLayers({ ...layers, [l]: e.target.checked })} />{' '}
@@ -54,8 +58,8 @@ export function Results({ disabled }: { disabled: boolean }) {
           <div className="score-cols">
             {(['off', 'on'] as const).map((m) => (
               <div key={m} className={`score s-${m === 'off' ? 'block' : 'ok'}`}>
-                <h3>Firewall {m.toUpperCase()}{m === 'on' && board.layers ? layerNote(board.layers) : ''}</h3>
-                <div className="big">{board[m].attacks_succeeded} / {board[m].attacks_total}</div>
+                <h3>Firewall {m}{m === 'on' && board.layers ? layerNote(board.layers) : ''}</h3>
+                <div className="big attacks">{board[m].attacks_succeeded} / {board[m].attacks_total}</div>
                 <div className="muted">attacks that succeeded</div>
                 <div className="big">{board[m].normal_passed} / {board[m].normal_total}</div>
                 <div className="muted">normal tasks that passed</div>
@@ -71,8 +75,8 @@ export function Results({ disabled }: { disabled: boolean }) {
                 <tr key={r.name}>
                   <td>{r.name}</td>
                   <td>{r.kind}</td>
-                  <td>{OUTCOME[r.outcome]}</td>
-                  <td>{on[r.name] ? OUTCOME[on[r.name].outcome] : ''}</td>
+                  <td><Outcome kind={r.outcome} /></td>
+                  <td>{on[r.name] ? <Outcome kind={on[r.name].outcome} /> : ''}</td>
                   <td>{on[r.name]?.blocked_rule ?? ''}</td>
                 </tr>
               ))}

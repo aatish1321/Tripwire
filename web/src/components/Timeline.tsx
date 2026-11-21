@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { AgentStep, Decision, Evidence, RunEvent, ToolCall, ToolResult } from '../types'
 import { short } from '../text'
-import { AGENTS, cap, ICON, worst } from './agents'
+import { AGENTS, cap, STATUS_WORD, worst } from './agents'
+import { Icon } from './Icon'
 import { RawVsClean } from './RawVsClean'
 
 type Card = { call: ToolCall; decision?: Decision; result?: ToolResult; firewallOn: boolean }
@@ -23,19 +24,20 @@ function group(events: RunEvent[]): Item[] {
   return items
 }
 
+/** The wire: the five agents on one line. After the agent that blocked, it turns dashed red and the rest are dimmed. */
 function Chain({ steps }: { steps: AgentStep[] }) {
+  const statuses: string[] = AGENTS.map((a) => worst(steps.filter((s) => s.agent === a)) ?? 'none')
+  const trip = statuses.indexOf('block')
   return (
-    <div className="chain">
-      {AGENTS.map((a, i) => {
-        const status = worst(steps.filter((s) => s.agent === a))
-        return (
-          <span key={a}>
-            {i > 0 && <span className="arrow">→</span>}
-            <span className={`chip s-${status ?? 'none'}`}>{ICON[a]} {cap(a)} {(status ?? '–').toUpperCase()}</span>
-          </span>
-        )
-      })}
-    </div>
+    <ol className="wire" aria-label="Agents that checked this step">
+      {AGENTS.map((a, i) => (
+        <li key={a} className={`s-${statuses[i]}${i === trip ? ' trip' : ''}${trip >= 0 && i > trip ? ' past' : ''}${trip >= 0 && i > trip && statuses[i] !== 'block' ? ' dead' : ''}`}>
+          <span className="dot" />
+          <span className="name">{cap(a)}</span>
+          <span className="state">{STATUS_WORD[statuses[i]]}</span>
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -52,14 +54,14 @@ function CallCard({ card }: { card: Card }) {
       {steps.length > 0 && <Chain steps={steps} />}
       {decision?.verdict === 'block' ? (
         <div className="blocked">
-          <div className="blocked-title">⛔ BLOCKED{decision.rule ? ` · ${decision.rule}` : ''}</div>
+          <div className="blocked-title"><Icon name="block" /> Blocked{decision.rule ? ` · ${decision.rule}` : ''}</div>
           <div className="reason">{decision.reason}</div>
           {techniques.length > 0 && <div className="techniques">Evidence found: {techniques.join(' · ')}</div>}
         </div>
       ) : decision ? (
-        <span className="badge allow">✅ Allowed</span>
+        <span className="verdict allow"><Icon name="check" /> Allowed</span>
       ) : !card.firewallOn ? (
-        <span className="badge none">⚪ No firewall: ran unchecked</span>
+        <span className="verdict none"><Icon name="off" /> No firewall: ran unchecked</span>
       ) : null}
       {result && <div className="result">→ {short(result.output, 170)}</div>}
       {result && evidence.length > 0 && <RawVsClean raw={result.output} clean={result.clean_output} evidence={evidence} />}
@@ -69,9 +71,9 @@ function CallCard({ card }: { card: Card }) {
 
 export function Timeline({ events, follow }: { events: RunEvent[]; follow: boolean }) {
   const end = useRef<HTMLDivElement>(null)
-  // on a projector the blocked card is below the fold: keep the newest step in view while the run plays
+  // the activity column scrolls on its own: keep the newest step in view while the run plays
   useEffect(() => {
-    if (follow) end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    if (follow) end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [events.length, follow])
 
   if (events.length === 0) return <p className="muted">Press Run to start the agent.</p>
@@ -82,19 +84,25 @@ export function Timeline({ events, follow }: { events: RunEvent[]; follow: boole
         const d = item.data
         switch (item.kind) {
           case 'user':
-            return <div key={i} className="user">👤 <b>User:</b> {d.text} {d.scripted && <i className="muted">(scripted replay)</i>}</div>
+            return (
+              <div key={i} className="user">
+                <Icon name="user" />
+                <div>{d.text} {d.scripted && <span className="muted">(scripted replay)</span>}</div>
+              </div>
+            )
           case 'agent_text':
-            return <div key={i}>🤖 {d.text}</div>
+            return <div key={i} className="final"><Icon name="bot" /><div>{d.text}</div></div>
           case 'leak':
             return (
               <div key={i} className="leak">
-                🚨 {d.kind === 'private_read' ? `Agent read private repo ${d.repo} after a stranger's instructions` : `Private data leaked into public repo ${d.repo}`}
+                <Icon name="alert" />
+                {d.kind === 'private_read' ? `Agent read private repo ${d.repo} after a stranger's instructions` : `Private data leaked into public repo ${d.repo}`}
               </div>
             )
           case 'final':
-            return <div key={i} className="final">🤖 {d.text}</div>
+            return <div key={i} className="final"><Icon name="bot" /><div>{d.text}</div></div>
           case 'error':
-            return <div key={i} className="error">Error: {d.message ?? JSON.stringify(d)}</div>
+            return <div key={i} className="error"><Icon name="alert" /><div>Error: {d.message ?? JSON.stringify(d)}</div></div>
           default:
             return null
         }

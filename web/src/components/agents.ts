@@ -1,7 +1,10 @@
 import type { AgentStep, RunEvent } from '../types'
+import type { IconName } from './Icon'
 
 export const AGENTS = ['manager', 'scanner', 'sanitizer', 'guard', 'judge'] as const
-export const ICON: Record<string, string> = { manager: '🧭', scanner: '🔎', sanitizer: '🧼', guard: '🛡️', judge: '⚖️' }
+export const ICON: Record<string, IconName> = { manager: 'route', scanner: 'search', sanitizer: 'filter', guard: 'shield', judge: 'scale' }
+/** The word shown for a status, in plain lowercase. */
+export const STATUS_WORD: Record<string, string> = { ok: 'ok', flag: 'flagged', block: 'blocked', skip: 'off', idle: 'idle', none: 'idle' }
 const RANK: Record<string, number> = { skip: 1, ok: 2, flag: 3, block: 4 }
 
 export const cap = (s: string) => s[0].toUpperCase() + s.slice(1)

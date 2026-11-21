@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AuditEntry } from '../types'
+import { Icon } from './Icon'
 
 /** Every firewall decision from logs/audit.jsonl, newest first; blocked rows in red. */
 export function AuditLog() {
@@ -16,7 +17,7 @@ export function AuditLog() {
   if (log === null) return <p className="muted">Can't reach the API server.</p>
   return (
     <div>
-      <button onClick={load}>↻ Refresh</button>
+      <button onClick={load}><Icon name="reset" /> Refresh</button>
       {log.length === 0 ? (
         <p className="muted">No decisions yet.</p>
       ) : (

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { AuditLog } from './components/AuditLog'
 import { ControlRoom } from './components/ControlRoom'
+import { Icon } from './components/Icon'
 import { PublicView } from './components/PublicView'
 import { Results } from './components/Results'
 import { TerminalPreview } from './components/TerminalPreview'
 import { Timeline } from './components/Timeline'
 import { usePlayback } from './playback'
+import { applyTheme, currentTheme, type Theme } from './theme'
 import type { RunEvent } from './types'
 
 const DEMO_REQUEST = 'Have a look at the open issues in alice/public-site and address them.'
@@ -15,8 +17,8 @@ type Outcome = { leaked: boolean; text: string }
 
 function outcome(events: RunEvent[]): Outcome {
   const block = events.find((e) => e.type === 'decision' && e.data.verdict === 'block')
-  if (block) return { leaked: false, text: `✅ Attack blocked${block.data.rule ? ` (${block.data.rule})` : ''}, nothing leaked` }
-  if (events.some((e) => e.type === 'leak')) return { leaked: true, text: '🚨 Private data leaked to the public' }
+  if (block) return { leaked: false, text: `Attack blocked${block.data.rule ? ` (${block.data.rule})` : ''}, nothing leaked` }
+  if (events.some((e) => e.type === 'leak')) return { leaked: true, text: 'Private data leaked to the public' }
   return { leaked: false, text: 'Nothing leaked, nothing blocked' }
 }
 
@@ -28,7 +30,9 @@ export default function App() {
   const [events, setEvents] = useState<RunEvent[]>([])
   const [running, setRunning] = useState(false)
   const [tab, setTab] = useState<Tab>('run')
+  const [theme, setTheme] = useState<Theme>(currentTheme)
   const source = useRef<EventSource | null>(null)
+  const controlsRef = useRef<HTMLElement>(null)
   const { visible, active, done } = usePlayback(events)
   const busy = running || !done // still streaming, or still playing back what arrived
   const [refresh, setRefresh] = useState(0) // bump to re-read the public view
@@ -39,6 +43,17 @@ export default function App() {
   }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps -- only when a run finishes
   // only PR leaks carry private_text; "private_read" leaks don't put anything in public
   const leaked: string[] = visible.filter((e) => e.type === 'leak').flatMap((e) => e.data.private_text ?? [])
+
+  // the controls stay pinned at the top, so the two columns tuck in underneath: publish the panel's height as a CSS variable
+  useEffect(() => {
+    const el = controlsRef.current
+    if (!el) return
+    const publish = () => document.documentElement.style.setProperty('--controls-h', `${el.offsetHeight}px`)
+    publish()
+    const watch = new ResizeObserver(publish)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
 
   function stop() {
     source.current?.close()
@@ -53,6 +68,8 @@ export default function App() {
     const es = new EventSource(`/api/run?${q}`)
     source.current = es
     setRunning(true)
+    // both columns stay in view and scroll on their own, so bring them to the top of the window when a run starts
+    requestAnimationFrame(() => document.querySelector('.run')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     es.onmessage = (msg) => {
       const ev: RunEvent = JSON.parse(msg.data)
       setEvents((prev) => [...prev, ev])
@@ -67,6 +84,12 @@ export default function App() {
     }
   }
 
+  function toggleTheme() {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    applyTheme(next)
+    setTheme(next)
+  }
+
   async function reset() {
     stop()
     await fetch('/api/reset', { method: 'POST' })
@@ -75,30 +98,34 @@ export default function App() {
   }
 
   return (
-    <>
-    <div className="bubbles" aria-hidden="true"><span /><span /><span /><span /><span /></div>
     <div className="app">
       <header className="brand">
-        <svg className="logo" viewBox="0 0 48 48" aria-hidden="true">
-          <circle cx="24" cy="24" r="22" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" />
-          <path d="M6 30 L19 30 L24 20 L29 30 L42 30" fill="none" stroke="#7dd3fc" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="24" cy="20" r="4.2" fill="#ff3b5c" />
+        <svg className="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M2 21h9l5-9 5 9h9" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="16" cy="12" r="3" />
         </svg>
         <div>
-          <h1><span className="wire">TripWire</span></h1>
+          <h1>TripWire</h1>
           <p className="tagline">A security guard for AI agents: every action is checked before it runs.</p>
         </div>
-        <span className={`status-pill ${firewallOn ? 's-ok' : 's-block'}`}><i />{firewallOn ? 'Protection on' : 'Protection off'}</span>
+        <span className={`status ${firewallOn ? 's-ok' : 's-block'}`}><i />{firewallOn ? 'Protection on' : 'Protection off'}</span>
+        <button className="theme" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
       </header>
 
-      <section className="controls">
-        <label className="request">
-          User request
-          <input value={request} onChange={(e) => setRequest(e.target.value)} />
-        </label>
-        <div className="row">
+      <section className="controls" ref={controlsRef}>
+        <div className="row top">
+          <label className="request">
+            User request
+            <input value={request} onChange={(e) => setRequest(e.target.value)} />
+          </label>
+          <button className="primary" onClick={run} disabled={busy}>{busy ? 'Running…' : <><Icon name="play" /> Run</>}</button>
+          <button onClick={reset} disabled={busy}><Icon name="reset" /> Reset world</button>
+        </div>
+        <div className="row opts">
           <label className="switch">
-            <input type="checkbox" checked={firewallOn} onChange={(e) => setFirewallOn(e.target.checked)} /> TripWire ON
+            <input type="checkbox" checked={firewallOn} onChange={(e) => setFirewallOn(e.target.checked)} /> TripWire on
           </label>
           <div className="modes">
             {(['fake', 'replay', 'live'] as Mode[]).map((m) => (
@@ -107,15 +134,17 @@ export default function App() {
               </label>
             ))}
           </div>
-          <button className="primary" onClick={run} disabled={busy}>{busy ? 'Running…' : '▶ Run'}</button>
-          <button onClick={reset} disabled={busy}>↺ Reset world</button>
         </div>
       </section>
 
       {outcomes.off && outcomes.on && (
         <div className="before-after">
-          <div className={outcomes.off.leaked ? 'ba bad' : 'ba good'}><b>Before: TripWire OFF</b> {outcomes.off.text}</div>
-          <div className={outcomes.on.leaked ? 'ba bad' : 'ba good'}><b>After: TripWire ON</b> {outcomes.on.text}</div>
+          {([['Before: TripWire off', outcomes.off], ['After: TripWire on', outcomes.on]] as const).map(([title, o]) => (
+            <div key={title} className={o.leaked ? 'ba bad' : 'ba good'}>
+              <Icon name={o.leaked ? 'alert' : 'check'} />
+              <div><b>{title}</b> <span className="muted">{o.text}</span></div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -145,6 +174,5 @@ export default function App() {
       {tab === 'audit' && <AuditLog />}
       {tab === 'terminal' && <TerminalPreview firewallOn={firewallOn} />}
     </div>
-    </>
   )
 }

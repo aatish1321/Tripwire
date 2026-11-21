@@ -1,5 +1,6 @@
 import type { Evidence } from '../types'
 import { highlight, toText } from '../text'
+import { Icon } from './Icon'
 
 /** Raw tool output with the hidden instructions marked, next to what the AI actually saw after the Sanitizer. */
 export function RawVsClean({ raw, clean, evidence }: { raw: unknown; clean: unknown; evidence: Evidence[] }) {
@@ -7,7 +8,7 @@ export function RawVsClean({ raw, clean, evidence }: { raw: unknown; clean: unkn
   const wrapper = clean && typeof clean === 'object' && 'untrusted_content' in clean ? (clean as Record<string, unknown>) : null
   return (
     <details className="rawclean">
-      <summary>⚠️ {count} hidden instruction{count === 1 ? '' : 's'} found · raw vs what the AI saw</summary>
+      <summary><Icon name="alert" /> {count} hidden instruction{count === 1 ? '' : 's'} found · raw vs what the AI saw</summary>
       <div className="cmp">
         <div>
           <h4>Raw (what the stranger wrote)</h4>

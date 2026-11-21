@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { highlight } from '../text'
+import { Icon } from './Icon'
 
 type PR = { number: number; title: string; body: string }
 
@@ -19,7 +20,7 @@ export function PublicView({ refresh, leaked, waiting }: { refresh: number; leak
   const marks = leaked.map((text) => ({ field: 'body', text, technique: 'leaked private text' }))
   return (
     <div className="public">
-      {leaked.length > 0 && <div className="leak">🚨 PRIVATE DATA IS NOW PUBLIC</div>}
+      {leaked.length > 0 && <div className="leak"><Icon name="alert" /> Private data is now public</div>}
       {prs.length === 0 && <p className="muted">No pull requests on alice/public-site.</p>}
       {prs.map((pr) => (
         <div key={pr.number} className="card">
