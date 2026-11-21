@@ -248,10 +248,27 @@ audit log). Routing is rule-based; the rules still decide and the LLMs only add 
 - Done when: a live run's untrusted reads and the blocked call each finish in under 2 s with Groq available, and
   `firewall.test_agents` still passes.
 
-**B10 (stretch): "Ask the human" verdict**
-- A third verdict for grey-zone calls (for example deletes the user did name), shown with Approve / Deny buttons.
-- Needs a change to `Decision.verdict` in `shared/contracts.py`, so the whole team must agree first, and A's loop must wait
-  for the answer. Cut this first if time runs short.
+**B10: "Ask the human" verdict** (`firewall/approvals.py`, `interceptor.py`, `shared/contracts.py`). **Done**, agreed by the team.
+- `Decision.verdict` can be `"ask"`. When `set_enabled({"ask": True})` is on, a block only the LLM wanted (`POLICY`) or an R4
+  delete of a repo the user named becomes `"ask"`; R1–R3 stay hard blocks. Off by default.
+- `wait_for_human(session, call, decision, timeout=60) -> Decision` (agent loop) and `answer(call_id, approved) -> bool` (UI),
+  in `firewall.approvals`. No answer in time = blocked. Both the ask and the final answer go to the audit log.
+- Test: `uv run python -m firewall.test_approvals`.
+
+**A12: Wait for the human in the agent loop** (`agent/victim.py`). Needed before anyone switches `"ask"` on.
+- In `run_call`, after `check()`: if `decision["verdict"] == "ask"`, yield the decision event, then
+  `decision = wait_for_human(session, call, decision)` (from `firewall.approvals`) and yield a second `decision` event with
+  the final verdict. Then carry on exactly as for allow / block.
+- Today `run_call` only checks for `"block"`, so an `"ask"` would run the tool. That's why asking is off by default.
+- Done when: with `set_enabled({"ask": True})` and an answer from another thread, a replay of attack 6 runs the delete on
+  Approve and stops on Deny; the scoreboard (asking off) is still 0/7 and 5/5.
+
+**C16: Approve / Deny on screen** (`server/api.py`, `web/`). After A12.
+- Server: `POST /api/approve` with `{"call_id", "approved"}` calls `answer(...)`; return 404 if it returns False.
+  `/api/run` also calls `set_enabled({"ask": ...})` from a new `ask=1` query parameter (on by default in the app).
+- Web: `"ask"` in `web/src/types.ts`; a card whose verdict is `"ask"` shows the reason and big **Approve** / **Deny** buttons and a
+  60-second countdown; the second `decision` event for the same `call_id` replaces it with the final verdict.
+- Done when: on screen, Approve lets the call run and Deny blocks it, and waiting 60 seconds blocks it.
 
 ### Shared: move the UI from Streamlit to React
 
@@ -406,7 +423,7 @@ screen shows it arriving 🚨. Firewall ON: the Scanner flags the hidden instruc
 ---
 
 ## Priority if time runs short
-Cut in this order: B10 → all of phase 3 (C15 → A11 → B11 → A10) → A6 → B9 → A9 → B8 → B5 → C6 → B4
+Cut in this order: C16 → A12 → all of phase 3 (C15 → A11 → B11 → A10) → A6 → B9 → A9 → B8 → B5 → C6 → B4
 (the rules' template reasons still work). Phase 3 only goes in if it works end to end; a half-built machine story is worse than none.
 If the React app isn't through C13 in time, **cut React, not the demo**: present the Streamlit fallback (`app.py`).
 **Never cut:** A5 (replay), B2 (rules), C2 (timeline with the blocked reason), C3 (the leak view), and in phase 2:

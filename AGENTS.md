@@ -144,7 +144,7 @@ class ToolResult(TypedDict):
 
 class Decision(TypedDict):
     call_id: str
-    verdict: Literal["allow", "block"]
+    verdict: Literal["allow", "block", "ask"]  # "ask": paused until the user approves or denies (B10)
     rule: Optional[str]            # "R1", "R2", "R3" or None
     reason: str                    # one plain-language sentence for the screen
     checked_by: list[str]          # e.g. ["rules", "policy_agent"]
@@ -187,7 +187,10 @@ def read_log(session_id: str | None = None) -> list[AuditEntry]
 def inspect_result(session, call, result) -> tuple[Any, list[AgentStep]]  # firewall.manager: AFTER an allowed tool,
                                                             # BEFORE the model sees it -> (clean_output, agent steps)
 def set_enabled(flags: dict[str, bool]) -> None             # firewall.manager: switch "scanner", "sanitizer", "guard",
-                                                            # "judge", "llm" (every LLM call) for the next runs
+                                                            # "judge", "llm" (every LLM call), "ask" (B10, off by default)
+def wait_for_human(session, call, decision, timeout=60) -> Decision  # firewall.approvals: the agent loop waits after "ask";
+                                                            # returns and logs the final allow/block (no answer = block)
+def answer(call_id: str, approved: bool) -> bool           # firewall.approvals: the UI's Approve/Deny; False if nothing waits
 def fake_run(firewall_on: bool, request: str = DEMO_REQUEST) -> Iterator[RunEvent]  # firewall.agent_fakes, for the UI
 ```
 
@@ -272,6 +275,10 @@ Tests write to a temporary log (`logger.LOG_PATH = <temp file>`), so the demo's 
 - LLM calls (Scanner LLM pass, policy agent) race Gemini and Groq inside a 6-second limit: Groq joins after a 3-second
   head start, or at once when Gemini failed or lost the previous call.
 - Rules-only mode for tests and the scoreboard: `set_enabled({"llm": False})`.
+- **Ask the human (B10):** with `set_enabled({"ask": True})`, a block that only the LLM wanted (`POLICY`) or an R4 delete of a
+  repo the user named becomes verdict `"ask"`. R1–R3 stay hard blocks. The agent loop calls `wait_for_human()`, the UI calls
+  `answer()`, and no answer within 60 seconds counts as Deny. Off by default, so loops that never wait (scoreboard, tests)
+  can't get an `"ask"` they don't handle.
 
 ---
 

@@ -3,6 +3,7 @@ intent check for writes) and then the Judge (plain-language reason with the scan
 Rules decide; the LLM can add a block but never remove one."""
 import time
 
+from firewall.approvals import open_question
 from firewall.logger import log_decision
 from firewall.manager import ENABLED, step, _ms
 from firewall.policy_agent import ask_policy
@@ -77,6 +78,16 @@ def check(session: Session, call: ToolCall) -> Decision:
         steps.append(step("judge", "block", decision["reason"], evidence, _ms(t)))
     else:
         steps.append(step("judge", "ok", decision["reason"], ms=_ms(t)))
+
+    # B10: grey zone = only the LLM objects (POLICY), or R4 (a delete of a repo the user named; R1 catches the others).
+    # R1-R3 stay hard blocks. The agent loop must call approvals.wait_for_human() on "ask".
+    if ENABLED["ask"] and decision["verdict"] == "block" and decision["rule"] in ("POLICY", "R4"):
+        decision["verdict"] = "ask"
+        decision["reason"] += " Do you want to allow it?"
+        for s in steps[1:]:
+            s["status"] = "flag" if s["status"] == "block" else s["status"]
+        steps[-1]["summary"] = decision["reason"]
+        open_question(call["id"])
 
     manager["ms"] = round(_ms(start))
     decision["agents"] = steps  # extra key for the UI: the agent steps behind this decision

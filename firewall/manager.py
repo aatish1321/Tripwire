@@ -11,7 +11,8 @@ from firewall.session import Session
 from shared.contracts import Provenance, ToolCall, ToolResult
 
 LISTING_TOOLS = {"list_issues", "list_repos"}
-ENABLED = {"scanner": True, "sanitizer": True, "guard": True, "judge": True, "llm": True}  # "llm": all LLM calls
+ENABLED = {"scanner": True, "sanitizer": True, "guard": True, "judge": True, "llm": True,  # "llm": all LLM calls
+           "ask": False}  # B10: off by default, so loops that don't wait for an answer (scoreboard, tests) never get "ask"
 
 
 def set_enabled(flags: dict[str, bool]) -> None:

@@ -20,7 +20,7 @@ class ToolResult(TypedDict):
 
 class Decision(TypedDict):
     call_id: str
-    verdict: Literal["allow", "block"]
+    verdict: Literal["allow", "block", "ask"]  # "ask": paused until the user approves or denies (B10)
     rule: Optional[str]            # "R1", "R2", "R3" or None
     reason: str                    # one plain-language sentence for the screen
     checked_by: list[str]          # e.g. ["rules", "policy_agent"]
