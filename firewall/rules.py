@@ -20,7 +20,7 @@ WRITE_PREFIXES = ("create_", "update_", "add_", "post_", "delete_", "push_", "co
 Result = Optional[tuple[str, str]]
 
 
-def _is_write(call: ToolCall) -> bool:
+def is_write(call: ToolCall) -> bool:
     return call["tool"].startswith(WRITE_PREFIXES)
 
 
@@ -30,7 +30,7 @@ def _is_public(repo: Optional[str]) -> bool:
 
 
 def _writes_public(call: ToolCall) -> bool:
-    return _is_write(call) and _is_public(call["args"].get("repo"))
+    return is_write(call) and _is_public(call["args"].get("repo"))
 
 
 def r1_scope_taint(session: Session, call: ToolCall) -> Result:
