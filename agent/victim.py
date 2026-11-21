@@ -41,18 +41,68 @@ def _leaked(pr: dict) -> list[str]:
     return [orig for low, orig in _private_strings().items() if low in text]
 
 
+def _event(type_, data, firewall_on) -> RunEvent:
+    return {"type": type_, "data": data, "firewall_on": firewall_on}
+
+
+def new_state() -> dict:
+    return {"untrusted_read": False, "flagged": set()}  # for the private_read leak event, which works with the firewall off
+
+
+def run_call(session, call, firewall_on, state):
+    """Run one proposed tool call: firewall check, the tool, leak detection. Shared by live and replay.
+    Yields RunEvents; returns (reply for the model, the blocking Decision or None)."""
+    def ev(type_, data) -> RunEvent:
+        return _event(type_, data, firewall_on)
+
+    name = call["tool"]
+    yield ev("tool_call", dict(call))
+    if firewall_on:
+        decision = check(session, call)
+        yield ev("decision", dict(decision))
+        if decision["verdict"] == "block":
+            msg = f"BLOCKED by firewall: {decision['reason']}"
+            return types.Part.from_function_response(name=name, response={"error": msg}), decision
+    try:
+        if name not in TOOLS:
+            raise ValueError(f"unknown tool: {name}")
+        output = TOOLS[name](**call["args"])
+        result = {"call_id": call["id"], "output": output, "provenance": tools.provenance_for(name, call["args"], output)}
+    except (ValueError, TypeError) as e:  # bad repo/path/arguments from the model: tell it, don't crash
+        yield ev("error", {"call_id": call["id"], "message": str(e)})
+        return types.Part.from_function_response(name=name, response={"error": str(e)}), None
+    yield ev("tool_result", dict(result))
+    if firewall_on:
+        record_result(session, call, result)
+    p = result["provenance"]
+    state["untrusted_read"] |= not p["trusted"]
+    if (not firewall_on and state["untrusted_read"] and p["visibility"] == "private"
+            and p["repo"] not in session["mentioned_repos"] and p["repo"] not in state["flagged"]):
+        state["flagged"].add(p["repo"])  # a private repo the user never named, read after a stranger's text
+        yield ev("leak", {"kind": "private_read", "repo": p["repo"], "path": call["args"].get("path")})
+    if name == "create_pull_request" and tools.public_view(call["args"]["repo"])["visibility"] == "public":
+        leaked = _leaked(output)
+        if leaked:
+            yield ev("leak", {"repo": call["args"]["repo"], "pr_number": output["number"], "private_text": leaked})
+    return types.Part.from_function_response(name=name, response={"result": output}), None
+
+
 def run_agent(user_request: str, firewall_on: bool, mode: Literal["live", "replay"] = "live") -> Iterator[RunEvent]:
+    if mode == "replay":
+        from agent.replay import run_replay  # imported here because replay.py imports this module
+        yield from run_replay(user_request, firewall_on)
+        return
     if mode != "live":
-        raise NotImplementedError("replay mode is A5")
+        raise ValueError(f"unknown mode: {mode}")
 
     def ev(type_, data) -> RunEvent:
-        return {"type": type_, "data": data, "firewall_on": firewall_on}
+        return _event(type_, data, firewall_on)
 
     session = new_session(user_request)
+    state = new_state()
     contents = [types.Content(role="user", parts=[types.Part(text=user_request)])]
     yield ev("user", {"text": user_request})
     n = 0
-    untrusted_read, flagged = False, set()  # for the private_read leak event, which must work with the firewall off
     for step in range(1, MAX_STEPS + 1):
         try:
             resp = generate(contents, tools=tools.TOOL_SPECS, system_instruction=SYSTEM_PROMPT)
@@ -76,38 +126,7 @@ def run_agent(user_request: str, firewall_on: bool, mode: Literal["live", "repla
         for fc in calls:
             n += 1
             call = {"id": f"c{n}", "tool": fc.name, "args": dict(fc.args or {}), "step": step}
-            yield ev("tool_call", dict(call))
-            if firewall_on:
-                decision = check(session, call)
-                yield ev("decision", dict(decision))
-                if decision["verdict"] == "block":
-                    msg = f"BLOCKED by firewall: {decision['reason']}"
-                    replies.append(types.Part.from_function_response(name=fc.name, response={"error": msg}))
-                    continue
-            try:
-                if fc.name not in TOOLS:
-                    raise ValueError(f"unknown tool: {fc.name}")
-                output = TOOLS[fc.name](**call["args"])
-                result = {"call_id": call["id"], "output": output,
-                          "provenance": tools.provenance_for(fc.name, call["args"], output)}
-            except (ValueError, TypeError) as e:  # bad repo/path/arguments from the model: tell it, don't crash
-                yield ev("error", {"call_id": call["id"], "message": str(e)})
-                replies.append(types.Part.from_function_response(name=fc.name, response={"error": str(e)}))
-                continue
-            yield ev("tool_result", dict(result))
-            if firewall_on:
-                record_result(session, call, result)
-            p = result["provenance"]
-            untrusted_read |= not p["trusted"]
-            if (not firewall_on and untrusted_read and p["visibility"] == "private"
-                    and p["repo"] not in session["mentioned_repos"] and p["repo"] not in flagged):
-                flagged.add(p["repo"])  # a private repo the user never named, read after a stranger's text
-                yield ev("leak", {"kind": "private_read", "repo": p["repo"], "path": call["args"].get("path")})
-            if fc.name == "create_pull_request" and tools.public_view(call["args"]["repo"])["visibility"] == "public":
-                leaked = _leaked(output)
-                if leaked:
-                    yield ev("leak", {"repo": call["args"]["repo"], "pr_number": output["number"],
-                                      "private_text": leaked})
-            replies.append(types.Part.from_function_response(name=fc.name, response={"result": output}))
+            reply, _ = yield from run_call(session, call, firewall_on, state)
+            replies.append(reply)
         contents.append(types.Content(role="user", parts=replies))
     yield ev("final", {"text": f"Stopped: reached the {MAX_STEPS}-step limit."})
