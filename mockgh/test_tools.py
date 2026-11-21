@@ -52,7 +52,7 @@ def main() -> None:
         assert tools.provenance_for("delete_repo", {"repo": PRIV}, {"deleted": PRIV})["repo"] == PRIV  # repo is gone, no crash
 
         names = [d.name for d in tools.TOOL_SPECS[0].function_declarations]
-        assert names == ["list_repos", "list_issues", "get_issue", "get_file", "create_pull_request"], names
+        assert names == ["list_repos", "list_issues", "get_issue", "get_file", "create_pull_request", "run_command"], names
         print("A2 OK: read issue, read private file, opened PR, public_view shows it")
     finally:
         reset_world()

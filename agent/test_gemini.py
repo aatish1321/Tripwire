@@ -96,7 +96,7 @@ def groq_fallback() -> None:
         m = sent[0]["messages"]
         assert [t["id"] for t in m[2]["tool_calls"]] == [m[3]["tool_call_id"], m[4]["tool_call_id"]]  # replies matched to calls
         assert "BLOCKED by firewall" in m[4]["content"]
-        assert [t["function"]["name"] for t in sent[0]["tools"]] == ["list_repos", "list_issues", "get_issue", "get_file", "create_pull_request"]
+        assert [t["function"]["name"] for t in sent[0]["tools"]] == ["list_repos", "list_issues", "get_issue", "get_file", "create_pull_request", "run_command"]
 
         gemini._client = _Stub({gemini.GEMINI_MODEL, gemini.GEMINI_FALLBACK_MODEL}, code=429)  # quota / bad key also fall back
         assert gemini.generate("hi").function_calls[0].name == "get_issue"
