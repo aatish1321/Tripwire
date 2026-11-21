@@ -37,7 +37,7 @@ through GitHub's MCP server), entirely on **fake local repos**:
 | Language | Python 3.12, managed with **uv** (`pyproject.toml` + `uv.lock`) |
 | UI | Streamlit, a single app (`st.session_state` for state) |
 | LLM | Gemini via `google-genai`: function calling for the victim agent, JSON output for the policy agent |
-| Models | `GEMINI_MODEL = "gemini-3.8-flash"`, `GEMINI_FALLBACK_MODEL = "gemini-3.6-flash"` (verified the night before) |
+| Models | `GEMINI_MODEL = "gemini-3.5-flash-lite"`, `GEMINI_FALLBACK_MODEL = "gemini-3.8-flash"` (chosen on 21 Nov: 3.8-flash returned 503 "high demand", and tool-calling requests to 3.6-flash timed out with 504; 3.5-flash-lite passed the A3 live test) |
 | Fake GitHub | Plain Python functions over a JSON file (`mockgh/world.json`). No real server, no real API |
 | Audit log | JSONL file (`logs/audit.jsonl`) |
 | Config | `python-dotenv`, with `GEMINI_API_KEY` in `.env` |
@@ -51,8 +51,9 @@ through GitHub's MCP server), entirely on **fake local repos**:
 - After pulling: `uv sync`.
 
 ### Gemini reliability
-Gemini returned 503 "high demand" errors during the setup check. Every Gemini call goes through one helper that retries
-2 times on 503/overloaded errors (1–2 seconds apart), then switches to `GEMINI_FALLBACK_MODEL`.
+Gemini returned 503 "high demand" errors during the setup check. Every Gemini call goes through one helper
+(`agent/gemini.py`) with a 15-second request timeout. It retries once on a 503/overloaded error or a timeout
+(1–2 seconds apart), then switches to `GEMINI_FALLBACK_MODEL`.
 
 ---
 

@@ -58,7 +58,7 @@ The environment (uv, `.env`, the Gemini key) already exists from setup night.
 
 **A3: Gemini helper** (`agent/gemini.py`)
 - One function for Gemini calls with function calling, using `GEMINI_MODEL` and `GEMINI_FALLBACK_MODEL` from `AGENTS.md`.
-- Retries 2 times on 503/overloaded errors (1–2 seconds apart), then switches to the fallback model.
+- 15-second request timeout. Retries once on a 503/overloaded error or a timeout (1–2 seconds apart), then switches to the fallback model.
 - Done when: a test call with one tool spec returns a function call.
 
 **A4: Victim agent, live mode** (`agent/victim.py`)
